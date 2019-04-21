@@ -35,7 +35,7 @@ class CurveAlgebraTests(unittest.TestCase):
         assert 0 @ j == j @ 0 == 0
 
     def test_piecewise_product(self):
-        pw = 2*base.Curve(base.Piecewise([13], [
+        pw = 2*base.Curve(base.PiecewiseCurve([13], [
             base.Curve(XtoA(1/2, 6/5)), -base.Curve(XtoA(1/2, 6/5))]))
 
         assert iround(pw(numpy.array([10.1]))[0], 7) == iround(
