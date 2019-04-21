@@ -98,7 +98,7 @@ class Polynomial(LinearCurve):
 
 
 class Curve(Repr, algebra.Vector):
-    support = numpy.arange(-10**3, 10**3 + 1)
+    support = numpy.arange(-1, 1.01, 0.01)
 
     def __init__(self, *curves, shift=0):
         self.curves = curves
@@ -109,19 +109,19 @@ class Curve(Repr, algebra.Vector):
 
     def eat(self, other):
         if isinstance(other, (int, float)):
-            return Curve(Polynomial(other))
+            return self.__class__(Polynomial(other))
 
         return other
 
     def add_other(self, curve):
-        return Curve(*(self.curves + curve.curves), shift=self._add+curve._add)
+        return self.__class__(*(self.curves + curve.curves), shift=self._add+curve._add)
 
     def num_prod(self, number):
-        return Curve(*(number*cu for cu in self.curves), shift=number*self._add)
+        return self.__class__(*(number*cu for cu in self.curves), shift=number*self._add)
 
     def braket(self, other):
         if (self.support == other.support).all():
-            return numpy.dot(self(self.support), other(self.support))
+            return numpy.dot(numpy.conj(self(self.support)), other(self.support))
 
         raise NotImplementedError(f'Curves should have the same support')
 

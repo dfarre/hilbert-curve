@@ -31,7 +31,7 @@ class CurveAlgebraTests(unittest.TestCase):
     def test_braket(self):
         j = base.Curve(base.Polynomial(0, 1/2))
 
-        assert 1 @ j == j @ 1 == 0
+        assert round(1 @ j, 12) == round(j @ 1, 12) == 0
         assert 0 @ j == j @ 0 == 0
 
     def test_piecewise_product(self):
