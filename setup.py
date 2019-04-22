@@ -25,7 +25,7 @@ setuptools.setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent'],
     packages=setuptools.find_packages(),
-    install_requires=['numpy'],
+    install_requires=['numpy', 'pandas'],
     setup_requires=['setuptools', 'configparser'],
     tests_require=tests_require,
     extras_require={'dev': ['ipdb', 'ipython'], 'test': tests_require},

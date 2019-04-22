@@ -8,9 +8,9 @@ from hilbert.curves import base
 
 from hilbert.curves import Log, Xlog, InverseXPolynomial, XtoA
 
-R0to1sics = spaces.LebesgueCurveSpace(spaces.Reals(0, 1, 0.01))
-SymRm1to1sics = spaces.LebesgueCurveSpace(spaces.Reals(-0.99, 1, 0.01))
-C1rectSics = spaces.LebesgueCurveSpace(spaces.ComplexRectangle(-1 - 1j, 1 + 1j, 0.01))
+R0to1sics = spaces.LebesgueCurveSpace(spaces.Reals.range(0, 1, 0.01))
+SymRm1to1sics = spaces.LebesgueCurveSpace(spaces.Reals.range(-0.99, 1, 0.01))
+C1rectSics = spaces.LebesgueCurveSpace(spaces.Complex.rectangle(-1 - 1j, 1 + 1j, 0.01))
 
 PW = 2*R0to1sics(base.PiecewiseCurve([13], [
     R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))

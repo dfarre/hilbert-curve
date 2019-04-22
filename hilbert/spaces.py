@@ -1,25 +1,38 @@
 import abc
 
+import pandas
 import numpy
 
 from hilbert.curves import base
 
 
-class Reals:
-    def __init__(self, start, end, cell):
-        self.support = numpy.arange(start, end, cell)
-        self.measure = cell
+class Domain:
+    def __init__(self, support, measure):
+        self.support, self.measure = support, measure
 
 
-class ComplexRectangle:
-    def __init__(self, sw, ne, re_cell, im_cell=None):
-        self.re_cell, self.im_cell = re_cell, im_cell or re_cell
-        self.size = tuple(map(int, ((ne.real - sw.real)/self.re_cell,
-                                    (ne.imag - sw.imag)/self.im_cell)))
-        self.support = numpy.array([[
-            (sw.real + x*self.re_cell) + (sw.imag + y*self.im_cell)*1j
-            for x in range(self.size[0])] for y in range(self.size[1])])
-        self.measure = self.re_cell*self.im_cell
+class Reals(Domain):
+    @classmethod
+    def range(cls, start, end, cell):
+        return cls(numpy.arange(start, end, cell), cell)
+
+    @classmethod
+    def from_index(cls, index):
+        step = (index._step if isinstance(index, pandas.RangeIndex)
+                else abs((index[1:] - index[:-1]).array).mean())
+
+        return cls(index.array, step)
+
+
+class Complex(Domain):
+    @classmethod
+    def rectangle(cls, sw, ne, re_cell, im_cell=None):
+        re_cell, im_cell = re_cell, im_cell or re_cell
+        size = tuple(map(int, ((ne.real - sw.real)/re_cell, (ne.imag - sw.imag)/im_cell)))
+
+        return cls(numpy.array([[
+            (sw.real + x*re_cell) + (sw.imag + y*im_cell)*1j
+            for x in range(size[0])] for y in range(size[1])]), re_cell*im_cell)
 
 
 class NoFiniteVectorNorm(Exception):
