@@ -2,9 +2,9 @@ import unittest
 
 import numpy
 
-from hilbert import iround
-
 from hilbert import spaces
+
+from hilbert.common import iround
 
 from hilbert.curves import base
 

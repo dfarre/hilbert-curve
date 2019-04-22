@@ -3,7 +3,7 @@ import unittest
 
 import numpy
 
-from hilbert import iround
+from hilbert.common import iround
 
 
 class TestIround(unittest.TestCase):
