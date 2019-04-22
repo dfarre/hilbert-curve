@@ -6,7 +6,7 @@ from hilbert import spaces
 
 from hilbert.curves import base
 
-from hilbert.curves.lib import Log, Xlog, InverseXPolynomial, XtoA
+from hilbert.curves import Log, Xlog, InverseXPolynomial, XtoA
 
 R0to1sics = spaces.LebesgueCurveSpace(spaces.Reals(0, 1, 0.01))
 SymRm1to1sics = spaces.LebesgueCurveSpace(spaces.Reals(-0.99, 1, 0.01))
