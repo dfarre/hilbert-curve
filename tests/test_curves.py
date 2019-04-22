@@ -4,8 +4,6 @@ import numpy
 
 from hilbert import spaces
 
-from hilbert.common import iround
-
 from hilbert.curves import base
 
 from hilbert.curves.lib import Log, Xlog, InverseXPolynomial, XtoA
@@ -81,14 +79,14 @@ class RealCurveAlgebraTests(unittest.TestCase):
 
         assert repr(curve) == '<Vector: (-0.5)(x + 1)log(x + 1) + (-3.14)/(x + 1)' \
             ' + (3) + (2) + (2)x>'
-        assert iround(curve(numpy.array([2.34]))[0], 7) == iround(numpy.array([
+        assert round(curve(numpy.array([2.34]))[0], 7) == round(numpy.array([
             3 - 0.5*(2.34 + 1)*numpy.log(2.34 + 1) - 3.14/(2.34 + 1) + 2 + 2*2.34])[0], 7)
 
     def test_nonlinear(self):
         curve = +2*R0to1sics(XtoA(1/2, 6/5))/5 - 1
 
         assert repr(curve) == '<Vector: (0.2)x^(1.2) + (-1)>'
-        assert iround(curve(numpy.array([0.8]))[0], 7) == iround(numpy.array([
+        assert round(curve(numpy.array([0.8]))[0], 7) == round(numpy.array([
             -1 + 0.2*0.8**1.2])[0], 7)
 
     def test_no_finite_norn(self):
@@ -112,5 +110,5 @@ class RealCurveAlgebraTests(unittest.TestCase):
         pw = 2*R0to1sics(base.PiecewiseCurve([13], [
             R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
 
-        assert iround(pw(numpy.array([10.1]))[0], 7) == iround(
+        assert round(pw(numpy.array([10.1]))[0], 7) == round(
             numpy.array([10.1**1.2])[0], 7)
