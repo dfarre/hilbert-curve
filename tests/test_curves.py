@@ -14,11 +14,37 @@ R0to1sics = spaces.LebesgueCurveSpace(spaces.Reals(0, 1, 0.01))
 SymRm1to1sics = spaces.LebesgueCurveSpace(spaces.Reals(-0.99, 1, 0.01))
 C1rectSics = spaces.LebesgueCurveSpace(spaces.ComplexRectangle(-1 - 1j, 1 + 1j, 0.01))
 
+PW = 2*R0to1sics(base.PiecewiseCurve([13], [
+    R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
+
+
+class CurveLibTests(unittest.TestCase):
+    def test_nonlinear_raises(self):
+        self.assertRaisesRegex(
+            base.InvalidParameters, r'At least 2 parameter\(s\) required', XtoA, 3)
+
+    def test_base_kind(self):
+        assert Log(3.14/19, pole=-2.2).kind() == 'Log'
+
+    def test_polynomial_kind(self):
+        assert base.Polynomial(3, 2, 1).kind() == 'Poly(2)'
+
+    def test_inverse_polynomial_kind(self):
+        assert InverseXPolynomial(3, 2, 1).kind() == 'Poly(-3)'
+
+    def test_piecewise_kind(self):
+        assert PW.kind() == 'PW:XtoA[13]XtoA'
+
+    def test_piecewise_str(self):
+        assert repr(PW) == '<Vector: (1.0)x^(1.2) | (-1.0)x^(1.2)>'
+
 
 class CurveEqualityTests(unittest.TestCase):
     def test_linear(self):
-        assert Log(1, pole=-1) == Log(1, pole=-1)
-        assert Log(1, pole=-1) != Log(1, pole=1)
+        log0, log1 = Log(1), Log(1, pole=-1)
+
+        assert {log1, Log(1, pole=-1)} == {log1}
+        assert log1 != log0
 
     def test_nonlinear(self):
         assert 2*XtoA(1, 1.1, pole=-1) == XtoA(2, 1.1, pole=-1)
@@ -37,14 +63,19 @@ class CurveEqualityTests(unittest.TestCase):
 
 class ComplexCurveAlgebraTests(unittest.TestCase):
     def test_braket(self):
-        """choose nice integral"""
+        """choose nice integral"""  # TODO
 
 
 class RealCurveAlgebraTests(unittest.TestCase):
+    def test_radd(self):
+        shifted = '<Vector: (0.5)(x + 1)log(x + 1) + (1.9)>'
+
+        assert repr(1.9 + SymRm1to1sics(Xlog(1/2, pole=-1))) == shifted
+
     def test_linear(self):
         u = numpy.array([3, -1, 2])
         v = numpy.array([SymRm1to1sics(Xlog(1/2, pole=-1), InverseXPolynomial(3.14, pole=-1)),
-                         SymRm1to1sics(Log(1, pole=-1)), 0])
+                         +SymRm1to1sics(Log(1, pole=-1)), 0])
         w = numpy.array([1, 0, SymRm1to1sics(base.Polynomial(1, 1))])
         curve = numpy.dot(u - v, w)
 

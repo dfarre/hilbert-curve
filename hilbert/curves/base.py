@@ -52,11 +52,14 @@ class Curve(Repr, Eq, algebra.Scale, metaclass=abc.ABCMeta):
         return ('/' if exponent < 0 else '') + (
             f'(x - {self.pole})'.replace('- -', '+ ') if self.pole else 'x') + exp
 
+
+class CurveFormatted(Curve):
+    @abc.abstractmethod
     def format(self, *params):
         """Text representation given parameters `params`"""
 
 
-class LinearCurve(Curve, metaclass=abc.ABCMeta):
+class LinearCurve(CurveFormatted, metaclass=abc.ABCMeta):
     def num_prod(self, number):
         return self.__class__(*(number*p for p in self.parameters), pole=self.pole)
 
@@ -72,7 +75,7 @@ class Polynomial(LinearCurve):
         return ' + '.join([f'({param}){self.svar(d)}' for d, param in enumerate(params)])
 
 
-class NonLinearCurve(Curve, metaclass=abc.ABCMeta):
+class NonLinearCurve(CurveFormatted, metaclass=abc.ABCMeta):
     """Of the form c0*f(c1, ...) with parameters (c0, c1, ...)"""
     min_dof = 2
 
@@ -105,7 +108,7 @@ class PiecewiseCurve(Curve):
 
     def kind(self):
         headed = zip(self.jumps_at, self.curves[1:])
-        chain = '-'.join([self.curves[0].kind()] + [
+        chain = ''.join([self.curves[0].kind()] + [
             f'[{head}]{curve.kind()}' for head, curve in headed])
 
         return f'PW:{chain}'
