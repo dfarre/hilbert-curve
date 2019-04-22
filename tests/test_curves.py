@@ -4,39 +4,82 @@ import numpy
 
 from hilbert import iround
 
+from hilbert import spaces
+
 from hilbert.curves import base
 
 from hilbert.curves.lib import Log, Xlog, InverseXPolynomial, XtoA
 
+R0to1sics = spaces.LebesgueCurveSpace(spaces.Reals(0, 1, 0.01))
+SymRm1to1sics = spaces.LebesgueCurveSpace(spaces.Reals(-0.99, 1, 0.01))
+C1rectSics = spaces.LebesgueCurveSpace(spaces.ComplexRectangle(-1 - 1j, 1 + 1j, 0.01))
 
-class CurveAlgebraTests(unittest.TestCase):
+
+class CurveEqualityTests(unittest.TestCase):
     def test_linear(self):
-        u = numpy.array([3, -1, 2])
-        v = numpy.array([base.Curve(Xlog(1/2, pole=-1), InverseXPolynomial(3.14)),
-                         +base.Curve(Log(1, pole=-1)), 0])
-        w = numpy.array([1, 0, base.Curve(base.Polynomial(1, 1))])
-        curve = numpy.dot(u - v, w)
-
-        assert repr(curve) == '<Curve: (-0.5)(x + 1)log(x + 1) + (-3.14)/x + (3) + (2) + (2)x>'
-        assert iround(curve(numpy.array([2.34]))[0], 7) == iround(numpy.array([
-            3 - 0.5*(2.34 + 1)*numpy.log(2.34 + 1) - 3.14/2.34 + 2 + 2*2.34])[0], 7)
+        assert Log(1, pole=-1) == Log(1, pole=-1)
+        assert Log(1, pole=-1) != Log(1, pole=1)
 
     def test_nonlinear(self):
-        curve = +2*base.Curve(XtoA(1/2, 6/5))/5 - 1
+        assert 2*XtoA(1, 1.1, pole=-1) == XtoA(2, 1.1, pole=-1)
+        assert 2*XtoA(1, 1.1, pole=-1) != XtoA(1, 1.1, pole=-1)
+        assert 2*XtoA(1, 1.1, pole=-1) != XtoA(2, 1.1, pole=3)
 
-        assert repr(curve) == '<Curve: (0.2)x^(1.2) + (-1)>'
-        assert iround(curve(numpy.array([0.11]))[0], 7) == iround(numpy.array([
-            -1 + 0.2*0.11**1.2])[0], 7)
+    def test_piecewise_curve(self):
+        pw = 2*R0to1sics(base.PiecewiseCurve([13], [
+            R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
+
+        assert pw == 2*R0to1sics(base.PiecewiseCurve([13], [
+            R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
+        assert pw != 2*R0to1sics(base.PiecewiseCurve([14], [
+            R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
+
+
+class ComplexCurveAlgebraTests(unittest.TestCase):
+    def test_braket(self):
+        """choose nice integral"""
+
+
+class RealCurveAlgebraTests(unittest.TestCase):
+    def test_linear(self):
+        u = numpy.array([3, -1, 2])
+        v = numpy.array([SymRm1to1sics(Xlog(1/2, pole=-1), InverseXPolynomial(3.14, pole=-1)),
+                         SymRm1to1sics(Log(1, pole=-1)), 0])
+        w = numpy.array([1, 0, SymRm1to1sics(base.Polynomial(1, 1))])
+        curve = numpy.dot(u - v, w)
+
+        assert repr(curve) == '<Vector: (-0.5)(x + 1)log(x + 1) + (-3.14)/(x + 1)' \
+            ' + (3) + (2) + (2)x>'
+        assert iround(curve(numpy.array([2.34]))[0], 7) == iround(numpy.array([
+            3 - 0.5*(2.34 + 1)*numpy.log(2.34 + 1) - 3.14/(2.34 + 1) + 2 + 2*2.34])[0], 7)
+
+    def test_nonlinear(self):
+        curve = +2*R0to1sics(XtoA(1/2, 6/5))/5 - 1
+
+        assert repr(curve) == '<Vector: (0.2)x^(1.2) + (-1)>'
+        assert iround(curve(numpy.array([0.8]))[0], 7) == iround(numpy.array([
+            -1 + 0.2*0.8**1.2])[0], 7)
+
+    def test_no_finite_norn(self):
+        self.assertRaisesRegex(
+            spaces.NoFiniteVectorNorm,
+            r'\(2\)logx does not belong to the space - no finite norm!',
+            SymRm1to1sics, Log(2))
 
     def test_braket(self):
-        j = base.Curve(base.Polynomial(0, 1/2))
+        u, v = R0to1sics(base.Polynomial(1, 1)), R0to1sics(base.Polynomial(1, -1))
+
+        assert round(u @ v, 2) == round(v @ u, 2) == 0.67
+
+    def test_braket__null(self):
+        j = SymRm1to1sics(base.Polynomial(0, 1/7))
 
         assert round(1 @ j, 12) == round(j @ 1, 12) == 0
         assert 0 @ j == j @ 0 == 0
 
     def test_piecewise_product(self):
-        pw = 2*base.Curve(base.PiecewiseCurve([13], [
-            base.Curve(XtoA(1/2, 6/5)), -base.Curve(XtoA(1/2, 6/5))]))
+        pw = 2*R0to1sics(base.PiecewiseCurve([13], [
+            R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
 
         assert iround(pw(numpy.array([10.1]))[0], 7) == iround(
             numpy.array([10.1**1.2])[0], 7)

@@ -35,8 +35,8 @@ class InverseXPolynomial(base.LinearCurve):
 
 
 class XtoA(base.NonLinearCurve):
-    def evaluate(self, s: numpy.array):
-        return self._mul*self.parameters[0]*s**self.parameters[1]
+    def evaluate_normal(self, s: numpy.array):
+        return s**self.parameters[1]
 
     def format(self, *params):
-        return f'({self._mul*params[0]}){self.svar(params[1])}'
+        return f'({params[0]}){self.svar(params[1])}'

@@ -10,15 +10,28 @@ from hilbert import algebra
 EXPONENTS = {0: '', 1: '', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹'}
 
 
-class AbstractCurve(Repr, Eq, algebra.Scale, metaclass=abc.ABCMeta):
+class InvalidParameters(Exception):
+    """Raised when curve input parameters do not suit the curve type"""
+
+
+class Curve(Repr, Eq, algebra.Scale, metaclass=abc.ABCMeta):
+    min_dof = None
+
     def __init__(self, *parameters, pole=0):
-        self.parameters, self.pole = numpy.array(parameters), pole
+        self.parameters = self._clean_parameters(parameters)
+        self.pole = pole
 
     def __call__(self, x: numpy.array):
         return self.evaluate(x - self.pole)
 
     def __str__(self):
         return self.format(*self.parameters)
+
+    def _clean_parameters(self, params):
+        if self.min_dof and len(params) < self.min_dof:
+            raise InvalidParameters(f'At least {self.min_dof} parameter(s) required')
+
+        return params
 
     @abc.abstractmethod
     def evaluate(self, s: numpy.array):
@@ -43,9 +56,9 @@ class AbstractCurve(Repr, Eq, algebra.Scale, metaclass=abc.ABCMeta):
         """Text representation given parameters `params`"""
 
 
-class LinearCurve(AbstractCurve, metaclass=abc.ABCMeta):
+class LinearCurve(Curve, metaclass=abc.ABCMeta):
     def num_prod(self, number):
-        return self.__class__(*(number*self.parameters), pole=self.pole)
+        return self.__class__(*(number*p for p in self.parameters), pole=self.pole)
 
 
 class Polynomial(LinearCurve):
@@ -59,20 +72,23 @@ class Polynomial(LinearCurve):
         return ' + '.join([f'({param}){self.svar(d)}' for d, param in enumerate(params)])
 
 
-class NonLinearCurve(AbstractCurve, metaclass=abc.ABCMeta):
-    def __init__(self, *parameters, pole=0, factor=1):
-        super().__init__(*parameters, pole=pole)
-        self._mul = factor
+class NonLinearCurve(Curve, metaclass=abc.ABCMeta):
+    """Of the form c0*f(c1, ...) with parameters (c0, c1, ...)"""
+    min_dof = 2
 
-    def eqkey(self):
-        return self._mul, self.parameters, self.pole
+    @abc.abstractmethod
+    def evaluate_normal(self, s: numpy.array):
+        """Normalized function with c0 == 1"""
+
+    def evaluate(self, s: numpy.array):
+        return self.parameters[0]*self.evaluate_normal(s)
 
     def num_prod(self, number):
         return self.__class__(
-            *self.parameters, pole=self.pole, factor=number*self._mul)
+            number*self.parameters[0], *self.parameters[1:], pole=self.pole)
 
 
-class PiecewiseCurve(AbstractCurve):
+class PiecewiseCurve(Curve):
     def __init__(self, jumps_at, curves):
         super().__init__(pole=0)
         self.jumps_at, self.piece_count = tuple(jumps_at), len(jumps_at) + 1
@@ -105,40 +121,37 @@ class PiecewiseCurve(AbstractCurve):
         ] + [s >= self.jumps_at[self.piece_count-2]]).transpose(), 1, 0)
 
 
-class Curve(Repr, Eq, algebra.Vector):
-    support = numpy.arange(-1, 1.01, 0.01)
-
-    def __init__(self, *curves, shift=0):
-        self.curves = curves
-        self._add = shift
+class Vector(Repr, Eq, algebra.Vector):
+    def __init__(self, domain, *curves):
+        self.domain, self.curves = domain, curves
 
     def __call__(self, x: numpy.array):
-        return self._add + sum([curve(x) for curve in self.curves])
+        return sum([curve(x) for curve in self.curves])
 
     def eqkey(self):
-        return self._add, self.curves
+        return self.domain, self.curves
 
     def eat(self, other):
         if isinstance(other, (int, float)):
-            return self.__class__(Polynomial(other))
+            return self.__class__(self.domain, Polynomial(other))
 
         return other
 
     def add_other(self, curve):
-        return self.__class__(*(self.curves + curve.curves), shift=self._add+curve._add)
+        return self.__class__(self.domain, *(self.curves + curve.curves))
 
     def num_prod(self, number):
-        return self.__class__(*(number*cu for cu in self.curves), shift=number*self._add)
+        return self.__class__(self.domain, *(number*cu for cu in self.curves))
 
     def braket(self, other):
-        if (self.support == other.support).all():
-            return numpy.dot(numpy.conj(self(self.support)), other(self.support))
+        if not (self.domain.support == other.domain.support).all():
+            raise NotImplementedError(f'Curves should have the same support')
 
-        raise NotImplementedError(f'Curves should have the same support')
+        return self.domain.measure*numpy.dot(
+            numpy.conj(self(self.domain.support)), other(self.domain.support))
 
     def __str__(self):
-        return ' + '.join(([str(self._add)] if self._add else [])
-                          + list(map(str, self.curves)))
+        return ' + '.join(list(map(str, self.curves)))
 
     def kind(self):
         return '+'.join(sorted(curve.kind() for curve in self.curves))
