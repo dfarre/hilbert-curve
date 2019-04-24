@@ -15,7 +15,7 @@ setuptools.setup(
     version=ini['version']['value'],
     author='Daniel Farré Manzorro',
     author_email='d.farre.m@gmail.com',
-    description='Numeric curve Hilbert space implementation',
+    description='Python approximation to Hilbert spaces',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://bitbucket.org/coleopter/hilbert-curve',
