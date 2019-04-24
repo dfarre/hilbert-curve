@@ -21,7 +21,7 @@ class Reals(Domain):
         step = (index._step if isinstance(index, pandas.RangeIndex)
                 else abs((index[1:] - index[:-1]).array).mean())
 
-        return cls(index.array, step)
+        return cls(index.array.to_numpy(), step)
 
 
 class Complex(Domain):
