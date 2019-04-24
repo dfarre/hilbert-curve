@@ -152,7 +152,8 @@ class Vector(Repr, Eq, algebra.Vector):
             raise NotImplementedError(f'Curves should have the same support')
 
         return self.domain.measure*numpy.dot(
-            numpy.conj(self(self.domain.support)), other(self.domain.support))
+            numpy.conj(self(self.domain.support)).flatten(),
+            other(self.domain.support).flatten())
 
     def __str__(self):
         return ' + '.join(list(map(str, self.curves)))

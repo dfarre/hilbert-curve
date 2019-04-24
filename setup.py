@@ -28,5 +28,5 @@ setuptools.setup(
     install_requires=['numpy', 'pandas'],
     setup_requires=['setuptools', 'configparser'],
     tests_require=tests_require,
-    extras_require={'dev': ['ipdb', 'ipython'], 'test': tests_require},
+    extras_require={'dev': ['ipdb', 'ipython', 'jupyter'], 'test': tests_require},
 )

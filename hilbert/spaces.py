@@ -28,14 +28,14 @@ class Complex(Domain):
     @classmethod
     def rectangle(cls, sw, ne, re_cell, im_cell=None):
         re_cell, im_cell = re_cell, im_cell or re_cell
-        size = tuple(map(int, ((ne.real - sw.real)/re_cell, (ne.imag - sw.imag)/im_cell)))
+        reals = numpy.arange(sw.real, ne.real, re_cell)
+        imags = numpy.arange(sw.imag, ne.imag, im_cell)*1j
 
-        return cls(numpy.array([[
-            (sw.real + x*re_cell) + (sw.imag + y*im_cell)*1j
-            for x in range(size[0])] for y in range(size[1])]), re_cell*im_cell)
+        return cls(numpy.repeat([reals], len(imags), axis=0).transpose() +
+                   numpy.repeat([imags], len(reals), axis=0), re_cell*im_cell)
 
 
-class NoFiniteVectorNorm(Exception):
+class InvalidVectorMade(Exception):
     """Raised for wrong vector input"""
 
 
@@ -59,7 +59,7 @@ class Space(metaclass=abc.ABCMeta):
         braket = vector @ vector
 
         if not (braket > 0 and numpy.isfinite(braket)):
-            raise NoFiniteVectorNorm(
+            raise InvalidVectorMade(
                 f'{vector} does not belong to the space - no finite norm!')
 
 

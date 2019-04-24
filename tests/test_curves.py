@@ -6,14 +6,14 @@ from hilbert import spaces
 
 from hilbert.curves import base
 
-from hilbert.curves import Log, Xlog, InverseXPolynomial, XtoA
+from hilbert.curves import Exp, Log, Xlog, InverseXPolynomial, XtoA
 
 R0to1sics = spaces.LebesgueCurveSpace(spaces.Reals.range(0, 1, 0.01))
 SymRm1to1sics = spaces.LebesgueCurveSpace(spaces.Reals.range(-0.99, 1, 0.01))
 C1rectSics = spaces.LebesgueCurveSpace(spaces.Complex.rectangle(-1 - 1j, 1 + 1j, 0.01))
 
 PW = 2*R0to1sics(base.PiecewiseCurve([13], [
-    R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(XtoA(1/2, 6/5))]))
+    R0to1sics(XtoA(1/2, 6/5)), -R0to1sics(Exp(1, -1/2))]))
 
 
 class CurveLibTests(unittest.TestCase):
@@ -31,10 +31,10 @@ class CurveLibTests(unittest.TestCase):
         assert InverseXPolynomial(3, 2, 1).kind() == 'Poly(-3)'
 
     def test_piecewise_kind(self):
-        assert PW.kind() == 'PW:XtoA[13]XtoA'
+        assert PW.kind() == 'PW:XtoA[13]Exp'
 
     def test_piecewise_str(self):
-        assert repr(PW) == '<Vector: (1.0)x^(1.2) | (-1.0)x^(1.2)>'
+        assert repr(PW) == '<Vector: (1.0)x^(1.2) | (-2)exp[(-0.5)x]>'
 
 
 class CurveEqualityTests(unittest.TestCase):
@@ -61,7 +61,9 @@ class CurveEqualityTests(unittest.TestCase):
 
 class ComplexCurveAlgebraTests(unittest.TestCase):
     def test_braket(self):
-        """choose nice integral"""  # TODO
+        u = C1rectSics(Exp(1, -1/2))
+
+        assert round(u @ u, 1) == 4.7
 
 
 class RealCurveAlgebraTests(unittest.TestCase):
@@ -91,7 +93,7 @@ class RealCurveAlgebraTests(unittest.TestCase):
 
     def test_no_finite_norn(self):
         self.assertRaisesRegex(
-            spaces.NoFiniteVectorNorm,
+            spaces.InvalidVectorMade,
             r'\(2\)logx does not belong to the space - no finite norm!',
             SymRm1to1sics, Log(2))
 

@@ -12,5 +12,7 @@ build
 htmlcov
 .tox
 
+.ipynb_checkpoints/
+
 .msg
 .secrets.ini
