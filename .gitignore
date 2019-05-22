@@ -11,7 +11,8 @@ build
 .coverage.*
 htmlcov
 .tox
-
+notebooks/*.html
+notebooks/nb.ipynb
 .ipynb_checkpoints/
 
 .msg
