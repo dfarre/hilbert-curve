@@ -33,6 +33,10 @@ class Image(stock.Repr, metaclass=abc.ABCMeta):
     def imag(self):
         return pandas.Series(self.i.imag, index=self.i.index)
 
+    @property
+    def density(self):
+        return self.i.abs()**2
+
 
 class RImage(Image):
     def __getitem__(self, x):
@@ -94,14 +98,24 @@ class Vector(stock.Repr, stock.Eq, algebra.Vector):
         self.image.real.plot(ax=top_ax, **kwargs)
         self.image.imag.plot(ax=bottom_ax, **kwargs)
 
+    def density_plot(self, axes, **kwargs):
+        self.image.density.plot(ax=axes, **kwargs)
+
     @stock.PyplotShow(nrows=2, ncols=1)
-    def plot(self, **kwargs):
+    def show(self, **kwargs):
         top_ax, bottom_ax = kwargs.pop('axes')
         self.full_plot(top_ax, bottom_ax, **kwargs)
         top_ax.yaxis.set_label_text('Re')
         bottom_ax.yaxis.set_label_text('Im')
         top_ax.grid()
         bottom_ax.grid()
+
+    @stock.PyplotShow()
+    def show_density(self, **kwargs):
+        axes = kwargs.pop('axes')
+        self.density_plot(axes, **kwargs)
+        axes.yaxis.set_label_text('abs²')
+        axes.grid()
 
     def kind(self):
         return '+'.join(sorted(curve.kind() for curve in self.curves))

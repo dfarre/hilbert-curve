@@ -87,8 +87,6 @@ class NonLinearCurve(CurveFormatted, metaclass=abc.ABCMeta):
 
 
 class BasisCurve(Curve):
-    """Orthonormal basis vector with a first parameter 1/√measure"""
-
     def scale(self, k0, k):
         return self.__class__(
             k0*self.parameters[0], *self.parameters[1:], pole=self.pole*k)
@@ -133,13 +131,23 @@ class PiecewiseCurve(Curve):
 # Non-linear curves ############################################################
 
 class Exp(NonLinearCurve, BasisCurve):
-    """Orthonormal basis vector with a factor 1/(√measure√dimension)"""
+    """Orthonormal Fourier basis vector with a first parameter 1/(√measure√dimension)"""
 
     def evaluate_normal(self, s: numpy.array):
         return numpy.exp(self.parameters[1]*s)
 
     def format(self, coef, exp_coef):
         return f'({coef})exp({exp_coef}){self.svar()}'
+
+
+class Gaussian(NonLinearCurve):
+    def evaluate_normal(self, s: numpy.array):
+        return numpy.exp(self.parameters[1]*s**2 - 1j*self.parameters[2]*s)
+
+    def format(self, coef, exp2_coef, exp1_coef):
+        return f'({coef})exp' + (
+            f'({exp2_coef}){self.svar(2)}' if not exp1_coef else
+            f'[({exp2_coef}){self.svar(2)} - ({1j*exp1_coef}){self.svar(1)}]')
 
 
 class XtoA(NonLinearCurve):
@@ -153,6 +161,8 @@ class XtoA(NonLinearCurve):
 # Linear curves ################################################################
 
 class Delta(LinearCurve, BasisCurve):
+    """Orthonormal basis vector with a first parameter 1/√measure"""
+
     def evaluate(self, s: numpy.array):
         return numpy.where(s == 0, self.parameters[0], 0)
 

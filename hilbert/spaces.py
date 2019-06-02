@@ -140,8 +140,8 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
     def op_from_callable(self, function, *apply_args, **apply_kwds):
         return self.operator().apply(function, *apply_args, **apply_kwds)
 
-    def unitary_op(self, hermitian):
-        if not hermitian.is_hermitian():
+    def unitary_op(self, hermitian, validate=True):
+        if validate and not hermitian.is_hermitian():
             raise NotImplementedError('Operator.unitary requires an hermitian generator')
 
         H = (hermitian if not hermitian.is_polar() else hermitian.toggle_polar())
@@ -213,16 +213,30 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
     def show_vectors(self, *vectors, **kwargs):
         self.plot_vectors(vectors, *kwargs.pop('axes'), **kwargs)
 
+    @stock.PyplotShow()
+    def show_vectors_density(self, *vectors, **kwargs):
+        self.plot_vectors_density(vectors, kwargs.pop('axes'), **kwargs)
+
     @staticmethod
     def plot_vectors(vectors, top_ax, bottom_ax, **kwargs):
-        for v in vectors:
-            v.full_plot(top_ax, bottom_ax, **kwargs)
+        for vector in vectors:
+            vector.full_plot(top_ax, bottom_ax, **kwargs)
 
         top_ax.yaxis.set_label_text('Re')
         bottom_ax.yaxis.set_label_text('Im')
         top_ax.grid(), bottom_ax.grid()
 
         return top_ax, bottom_ax
+
+    @staticmethod
+    def plot_vectors_density(vectors, axes, **kwargs):
+        for vector in vectors:
+            vector.density_plot(axes, **kwargs)
+
+        axes.yaxis.set_label_text('abs²')
+        axes.grid()
+
+        return axes
 
 
 class LebesgueCurveSpace(Space):
@@ -308,7 +322,7 @@ class Field(stock.IndexXFrame, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def plot_domain(self, **kwargs):
-        """Show domain"""
+        """Show space domain"""
 
     def update(self):
         self.o = self.o.apply(lambda s: s.map(
@@ -493,7 +507,7 @@ class C1Field(stock.ComplexIndexMixin, Field):
         title = repr(vector)
         axes = self.base_plot(
             kwargs.pop('axes'), (title[:120] + '...') if len(title) > 120 else title)
-        values = vector.image.i.abs().unstack(level=0)
+        values = vector.image.density.unstack(level=0)
         xticks, yticks = self.cell_limits
         coll = axes.pcolormesh(xticks, yticks, values.values, **kwargs)
         kwargs.pop('figure').colorbar(coll, ax=axes)

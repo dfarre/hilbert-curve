@@ -40,6 +40,9 @@ class CurveLibTests(unittest.TestCase):
 
         assert repr(delta) == f'<Vector: (150.0)δ(x - {z})>'
 
+    def test_gaussian_format__real(self):
+        assert str(lib.Gaussian(3.01, -1.2, 0)) == '(3.01)exp(-1.2)x²'
+
 
 class CurveEqualityTests(unittest.TestCase):
     def test_linear(self):
