@@ -5,6 +5,7 @@ import pandas
 
 from hilbert import EQ_ROUND_TO
 
+from hilbert import fields
 from hilbert import spaces
 from hilbert import stock
 
@@ -108,7 +109,7 @@ class HamiltonianSystem(System):
 
 class R1System(System):
     def __init__(self, lbound, rbound, dimension):
-        super().__init__(spaces.R1Field.range(
+        super().__init__(fields.R1Field.range(
             spaces.LebesgueCurveSpace, lbound, rbound, dimension))
 
     @property

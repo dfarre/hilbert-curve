@@ -98,13 +98,25 @@ class FrozenLazyAttrs:
         return getattr(instance, f'_{key}')
 
 
-class IndexFrame(Repr, metaclass=abc.ABCMeta):
+class WrappedDataFrame(Repr, metaclass=abc.ABCMeta):
     """Pandas data frame wrapper for custom indexing with complex numbers"""
     def __init__(self, data_frame):
         self.o = data_frame
 
     def __str__(self):
         return f'\n{self.o}'
+
+    def __getitem__(self, location):
+        return self.o.loc[location]
+
+    def __setitem__(self, location, value):
+        self.o.loc[location] = value
+
+    def at(self, x, column):
+        return self.o.at[self.to_index(x), column]
+
+    def setat(self, x, column, value):
+        self.o.at[self.to_index(x), column] = value
 
     @abc.abstractstaticmethod
     def to_index(x):

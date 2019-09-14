@@ -3,13 +3,14 @@ import unittest
 
 import numpy
 
+from hilbert import fields
 from hilbert import spaces
 
 from hilbert.curves import lib
 
-R0to1L2 = spaces.R1Field.range(spaces.LebesgueCurveSpace, 0, 1, 101)
-SymRm1to1L2 = spaces.R1Field.range(spaces.LebesgueCurveSpace, -1, 1, 201)
-C1L2 = spaces.C1Field.rectangle(spaces.LebesgueCurveSpace, -1 - 1j, 1 + 1j, 301)
+R0to1L2 = fields.R1Field.range(spaces.LebesgueCurveSpace, 0, 1, 101)
+SymRm1to1L2 = fields.R1Field.range(spaces.LebesgueCurveSpace, -1, 1, 201)
+C1L2 = fields.C1Field.rectangle(spaces.LebesgueCurveSpace, -1 - 1j, 1 + 1j, 301)
 
 PW = 2*R0to1L2(lib.PiecewiseCurve([0.13], [lib.XtoA(1/2, 6/5), -lib.Exp(1, -1/2)]))
 

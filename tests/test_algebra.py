@@ -1,7 +1,34 @@
 import unittest
 
+import pandas
+
 from hilbert import algebra
+from hilbert import fields
 from hilbert import spaces
+
+C2 = fields.R1Field.range(spaces.LebesgueCurveSpace, 0, 1, 2)
+
+
+class TensorProductTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.u, cls.v, cls.w, cls.x = map(lambda a: C2(series=pandas.Series(a)), (
+            [1, -1j], [-2j, 3], [0, 1], [1, -1]))
+        cls.uv = algebra.TensorProduct(cls.u, cls.v)
+        cls.vu = algebra.TensorProduct(cls.v, cls.u)
+        cls.uvw = algebra.TensorProduct(cls.u, cls.v, cls.w)
+        cls.wvu = algebra.TensorProduct(cls.w, cls.v, cls.u)
+        cls.uvw_wvu = algebra.TensorProductSum(cls.uvw, cls.wvu)
+
+    def test_vector_mul_vector(self):
+        assert 2.1*(self.u*self.v) == self.uv*2.1
+        assert (((-1)*self.v)*((-1)*self.u))*0.3 == 0.3*self.vu
+
+    def test_vector_mul_tensorproduct(self):
+        assert (self.uv*self.w, self.w*self.vu) == (self.uvw, self.wvu)
+
+    def test_tensorproductsum_eq(self):
+        assert 3.14*self.uvw_wvu == (self.wvu + self.uvw)*3.14
 
 
 class PolarComplexTests(unittest.TestCase):
@@ -29,8 +56,7 @@ class PolarComplexTests(unittest.TestCase):
 
 class PolarOperatorTests(unittest.TestCase):
     def setUp(self):
-        self.C2 = spaces.R1Field.range(spaces.LebesgueCurveSpace, 0, 1, 2)
-        self.s2 = self.C2.operator([[0, -1j], [1j, 0]])
+        self.s2 = C2.operator([[0, -1j], [1j, 0]])
         self.ps2 = self.s2.toggle_polar()
 
     def test(self):
@@ -38,15 +64,15 @@ class PolarOperatorTests(unittest.TestCase):
         assert self.ps2.is_polar() is True
         assert self.ps2.toggle_polar().is_polar() is False
         assert (self.ps2@self.ps2, self.s2@self.ps2,
-                self.ps2@self.s2, self.s2@self.s2) == (self.C2.Id,)*4
+                self.ps2@self.s2, self.s2@self.s2) == (C2.Id,)*4
         assert self.s2.is_hermitian() is True
         assert self.ps2.is_hermitian() is True
 
     def test_new_basis(self):
-        U = self.C2.unitary_op(self.ps2).toggle_polar()
+        U = C2.unitary_op(self.ps2).toggle_polar()
 
         assert U.is_polar() is True
 
-        self.C2.map_basis(U)
+        C2.map_basis(U)
 
-        assert self.C2.is_orthonormal('new') is True
+        assert C2.is_orthonormal('new') is True

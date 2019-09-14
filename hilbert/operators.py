@@ -54,7 +54,7 @@ class Operator(stock.Eq, stock.IndexXYFrame):
         return self.apply(lambda arr: algebra.PolarComplex.from_x(*arr), raw=True)
 
     def is_polar(self):
-        return set(self.o.dtypes).pop() == numpy.object
+        return set(self.o.dtypes) == {numpy.object}
 
     def where(self, condition, *args, **kwargs):
         return self.un(lambda df: df.where(condition, *args, **kwargs))
@@ -134,11 +134,3 @@ class Operator(stock.Eq, stock.IndexXYFrame):
 
     def is_unitary(self):
         return self.dagger()@self == self.space.Id and self@self.dagger() == self.space.Id
-
-
-class ROperator(stock.RealIndexMixin, Operator):
-    """ℝ-indexed operator"""
-
-
-class COperator(stock.ComplexIndexMixin, Operator):
-    """ℂ-indexed operator"""

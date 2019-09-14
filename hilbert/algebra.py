@@ -1,10 +1,14 @@
 import abc
 import cmath
+import functools
+import itertools
+import operator
 
 from hilbert import EQ_ROUND_TO
 
 from hilbert import stock
 
+import pandas
 import numpy
 
 
@@ -44,7 +48,7 @@ class PolarComplex(stock.Repr):
         if isinstance(other, self.__class__):
             return other
 
-        raise NotImplementedError(f'Operation with {other}')
+        raise NotImplementedError(f'Operation with {repr(other)}')
 
     def eatbin(self, other, norm_phase):
         pc = self.eat(other)
@@ -58,7 +62,7 @@ class PolarComplex(stock.Repr):
         if isinstance(other, self.__class__):
             return other.number
 
-        raise NotImplementedError(f'Operation with {other}')
+        raise NotImplementedError(f'Operation with {repr(other)}')
 
     def takebin(self, other, norm_phase):
         number = self.take(other)
@@ -120,20 +124,20 @@ class PolarComplex(stock.Repr):
         return -self.__sub__(other)
 
 
-class Scale(metaclass=abc.ABCMeta):
+class Scalable(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def num_prod(self, number):
-        """Return the product"""
+        """Return the instance scaled by number"""
 
-    def __mul__(self, number):
-        if not number:
+    def __mul__(self, other):
+        if not other:
             return 0
-        elif number == 1:
+        elif other == 1:
             return self
-        elif isinstance(number, (int, float, complex)):
-            return self.num_prod(number)
+        elif isinstance(other, (int, float, complex)):
+            return self.num_prod(other)
         else:
-            raise NotImplementedError(f'Product by {number}')
+            raise NotImplementedError(f'Product with {repr(other)}')
 
     def __rmul__(self, number):
         return self.__mul__(number)
@@ -151,11 +155,7 @@ class Scale(metaclass=abc.ABCMeta):
         raise NotImplementedError(f'{self} is not /-invertible')
 
 
-class AbelianSumScale(Scale, metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def eat(self, other):
-        """Return equivalent of `other` - if any"""
-
+class ScalableAbelianSum(Scalable, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def add_other(self, other):
         """Add other instance"""
@@ -164,12 +164,7 @@ class AbelianSumScale(Scale, metaclass=abc.ABCMeta):
         if not other:
             return self
 
-        other = self.eat(other)
-
-        if isinstance(other, self.__class__):
-            return self.add_other(other)
-
-        raise NotImplementedError(f'Addition to {repr(other)}')
+        return self.add_other(self.eat(other))
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -180,22 +175,168 @@ class AbelianSumScale(Scale, metaclass=abc.ABCMeta):
     def __rsub__(self, other):
         return -self.__sub__(other)
 
+    def eat(self, other):
+        """Override to return `other` as an instance of `self.__class__`"""
+        if isinstance(other, self.__class__):
+            return other
 
-class Vector(AbelianSumScale, metaclass=abc.ABCMeta):
+        raise NotImplementedError(
+            f'Cannot interpret {repr(other)} as an instance of {self.__class__}')
+
+
+@stock.FrozenLazyAttrs(('space',), ('image',))
+class Vector(ScalableAbelianSum, stock.Repr, stock.Hashable, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def braket(self, other):
-        """Real scalar product"""
+        """Complex scalar product"""
 
     def __matmul__(self, other):
-        if not other:
-            return 0
-
-        other = self.eat(other)
-
-        if isinstance(other, self.__class__):
-            return self.braket(other)
-
-        raise NotImplementedError(f'Braket with {repr(other)}')
+        return self.braket(self.eat(other))
 
     def __rmatmul__(self, other):
         return numpy.conj(self.__matmul__(other))
+
+    def __mul__(self, other):
+        if isinstance(other, self.__class__):
+            return TensorProduct(self, other)
+        elif isinstance(other, TensorProduct):
+            return other.__class__(self, *other.vectors)
+        else:
+            return super().__mul__(other)
+
+    def eqkey(self):
+        return self.space, tuple(self.image.i.round(EQ_ROUND_TO))
+
+
+class TensorProduct(Vector):
+    def __init__(self, *vectors):
+        self.vectors = vectors
+
+    def __mul__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__class__(*(self.vectors + other.vectors))
+        elif isinstance(other, Vector):
+            return self.__class__(*(self.vectors + (other,)))
+        elif isinstance(other, TensorProductSum):
+            return TensorProductSum(*(self.__class__(*(self.vectors + (oth.vectors,)))
+                                      for oth in other.products))
+        else:
+            return super(Vector, self).__mul__(other)
+
+    def __matmul__(self, other):
+        if isinstance(other, TensorProductSum):
+            return sum(self.braket(oth) for oth in other.products)
+        else:
+            return super().__mul__(other)
+
+    def __str__(self):
+        return ' ⊗ '.join(map(str, self.vectors))
+
+    def _make_image(self):
+        return functools.reduce(operator.mul, (v.image for v in self.vectors))
+
+    def braket(self, other):
+        return functools.reduce(operator.mul, (
+            u.braket(v) for u, v in zip(self.vectors, other.vectors)))
+
+    def num_prod(self, number):
+        return self.__class__(self.vectors[0].num_prod(number), *self.vectors[1:])
+
+    def add_other(self, other):
+        return TensorProductSum(self, other)
+
+    def eat(self, other):
+        if isinstance(other, Vector):
+            return self.__class__(other)
+        else:
+            return super().eat(other)
+
+
+class TensorProductSum(Vector):
+    def __init__(self, *tensor_products):
+        self.products = tensor_products
+
+    def __str__(self):
+        return ' + '.join(map(str, self.products))
+
+    def _make_image(self):
+        return functools.reduce(operator.add, (v.image for v in self.products))
+
+    def braket(self, other):
+        return sum(x.braket(y) for x, y in itertools.product(self.products, other.products))
+
+    def num_prod(self, number):
+        return self.__class__(*(pr.num_prod(number) for pr in self.products))
+
+    def add_other(self, other):
+        return self.__class__(*(self.products + other.products))
+
+    def eat(self, other):
+        if isinstance(other, TensorProduct):
+            return self.__class__(other)
+        elif isinstance(other, Vector):
+            return self.__class__(TensorProduct(other))
+        else:
+            return super().eat(other)
+
+
+class Image(stock.Repr, Scalable):
+    def __init__(self, *args, series=None, **kwargs):
+        self.i = pandas.Series(*args, **kwargs) if series is None else series
+
+    def __str__(self):
+        return f'\n{self.i}'
+
+    def __getitem__(self, x):
+        return self.i.loc[x]
+
+    def __add__(self, other):
+        return self.__class__(series=self.i + self.take(other))
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __mul__(self, other):
+        taken = self.take(other)
+
+        if isinstance(taken, pandas.Series):
+            return self.__class__(series=self.tensor_product(self.i, taken))
+
+        return super().__mul__(taken)
+
+    def __rmul__(self, other):
+        taken = self.take(other)
+
+        if isinstance(taken, pandas.Series):
+            return self.__class__(series=self.tensor_product(taken, self.i))
+
+        return super().__rmul__(taken)
+
+    def num_prod(self, number):
+        return self.__class__(series=number*self.i)
+
+    def take(self, other):
+        return other.i if isinstance(other, self.__class__) else other
+
+    @staticmethod
+    def tensor_product(lseries, rseries):
+        series = pandas.concat(iter(lseries.map(lambda x: x*rseries)))
+        llevels = (lseries.index.levels if isinstance(lseries.index, pandas.MultiIndex)
+                   else [lseries.index])
+        rlevels = (rseries.index.levels if isinstance(rseries.index, pandas.MultiIndex)
+                   else [rseries.index])
+        series.index = pandas.MultiIndex.from_product(llevels + rlevels)
+
+        return series
+
+    @property
+    def real(self):
+        return pandas.Series(self.i.real, index=self.i.index)
+
+    @property
+    def imag(self):
+        return pandas.Series(self.i.imag, index=self.i.index)
+
+    @property
+    def density(self):
+        return self.i.abs()**2

@@ -3,10 +3,7 @@ import abc
 import pandas
 import numpy
 
-from hilbert import EQ_ROUND_TO
-
 from hilbert import algebra
-from hilbert import spaces
 from hilbert import stock
 
 from hilbert.curves import lib
@@ -52,7 +49,6 @@ class CImage(Image):
 class Vector(stock.Repr, stock.Eq, algebra.Vector):
     def __init__(self, space, *curves):
         self.space, self.curves = space, curves
-        self.image_type = CImage if isinstance(self.space.bases, spaces.C1Field) else RImage
 
     def __call__(self, x):
         return self.image[x]
@@ -61,7 +57,7 @@ class Vector(stock.Repr, stock.Eq, algebra.Vector):
         return ' + '.join(list(map(str, self.curves)))
 
     def _make_image(self):
-        return self.image_type(series=sum(map(self.get_image_series, self.curves)))
+        return algebra.Image(series=sum(map(self.get_image_series, self.curves)))
 
     def _make_norm(self):
         return numpy.sqrt(self@self)
@@ -70,12 +66,8 @@ class Vector(stock.Repr, stock.Eq, algebra.Vector):
         if isinstance(curve, lib.ImageCurve):
             return curve.image.i
 
-        return self.image_type(
+        return algebra.Image(
             curve(self.space.bases.domain()), index=self.space.bases.o.index).i
-
-    def eq(self, other):
-        return self.space == other.space and not (
-            self.image.i - other.image.i).abs().round(EQ_ROUND_TO).any()
 
     def update(self):
         """Called to propagate space mutations when needed"""
@@ -127,10 +119,10 @@ class Vector(stock.Repr, stock.Eq, algebra.Vector):
         if isinstance(other, (int, float)):
             return self.__class__(self.space, lib.Polynomial(other))
 
-        return other
+        return super().eat(other)
 
     def num_prod(self, number):
-        return self.__class__(self.space, *(number*cu for cu in self.curves))
+        return self.__class__(self.space, *(cu.num_prod(number) for cu in self.curves))
 
     def add_other(self, other):
         self.check_if_equal_spaces(other)

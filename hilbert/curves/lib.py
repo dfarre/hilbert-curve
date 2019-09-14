@@ -19,8 +19,7 @@ class InvalidParameters(Exception):
 # Abstract base curves #########################################################
 
 @stock.FrozenLazyAttrs(('parameters', 'pole'))
-class Curve(stock.Repr, stock.Hashable, algebra.Scale,
-            metaclass=abc.ABCMeta):
+class Curve(stock.Repr, stock.Hashable, algebra.Scalable, metaclass=abc.ABCMeta):
     min_dof = None
 
     def __init__(self, *parameters, pole=0):
