@@ -218,13 +218,16 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
         self.plot_vectors_density(vectors, kwargs.pop('axes'), **kwargs)
 
     @staticmethod
-    def plot_vectors(vectors, top_ax, bottom_ax, **kwargs):
+    def plot_vectors(vectors, top_ax, bottom_ax, title=None, **kwargs):
         for vector in vectors:
             vector.full_plot(top_ax, bottom_ax, **kwargs)
 
         top_ax.yaxis.set_label_text('Re')
         bottom_ax.yaxis.set_label_text('Im')
         top_ax.grid(), bottom_ax.grid()
+
+        if title is not None:
+            top_ax.set_title(title)
 
         return top_ax, bottom_ax
 

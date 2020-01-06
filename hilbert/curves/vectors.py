@@ -27,11 +27,11 @@ class Image(stock.Repr, metaclass=abc.ABCMeta):
 
     @property
     def real(self):
-        return pandas.Series(self.i.real, index=self.i.index)
+        return pandas.Series(numpy.real(self.i.to_numpy()), index=self.i.index)
 
     @property
     def imag(self):
-        return pandas.Series(self.i.imag, index=self.i.index)
+        return pandas.Series(numpy.imag(self.i.to_numpy()), index=self.i.index)
 
     @property
     def density(self):
@@ -48,7 +48,7 @@ class CImage(Image):
         return self.i.loc[(z.real, z.imag)]
 
 
-@stock.FrozenLazyAttrs(('space', 'curves', 'image_type'), ('image',))
+@stock.FrozenLazyAttrs(('space', 'curves', 'image_type'), ('image', 'norm'))
 class Vector(stock.Repr, stock.Eq, algebra.Vector):
     def __init__(self, space, *curves):
         self.space, self.curves = space, curves
@@ -62,6 +62,9 @@ class Vector(stock.Repr, stock.Eq, algebra.Vector):
 
     def _make_image(self):
         return self.image_type(series=sum(map(self.get_image_series, self.curves)))
+
+    def _make_norm(self):
+        return numpy.sqrt(self@self)
 
     def get_image_series(self, curve):
         if isinstance(curve, lib.ImageCurve):

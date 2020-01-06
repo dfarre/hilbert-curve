@@ -2,13 +2,7 @@ import unittest
 
 import pandas
 
-from ipynb_tests import tester
-
 from hilbert import spaces
-
-
-class BasisChangeTests(tester.NotebookTester, unittest.TestCase):
-    notebooks_path = 'notebooks'
 
 
 class TestR1Field(unittest.TestCase):
