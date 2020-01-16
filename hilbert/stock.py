@@ -1,6 +1,8 @@
 import abc
 import functools
 
+import pandas
+
 from matplotlib import pyplot
 
 
@@ -98,10 +100,12 @@ class FrozenLazyAttrs:
         return getattr(instance, f'_{key}')
 
 
-class WrappedDataFrame(Repr, metaclass=abc.ABCMeta):
-    """Pandas data frame wrapper for custom indexing with complex numbers"""
-    def __init__(self, data_frame):
-        self.o = data_frame
+class WrappedDataFrame(Repr):
+    """Pandas data frame wrapper - an alternative to subclassing"""
+    dtype = None
+
+    def __init__(self, *args, **kwargs):
+        self.o = pandas.DataFrame(*args, **kwargs)
 
     def __str__(self):
         return f'\n{self.o}'
@@ -113,85 +117,19 @@ class WrappedDataFrame(Repr, metaclass=abc.ABCMeta):
         self.o.loc[location] = value
 
     def at(self, x, column):
-        return self.o.at[self.to_index(x), column]
+        return self.o.at[x, column]
 
-    def setat(self, x, column, value):
-        self.o.at[self.to_index(x), column] = value
+    def put(self, x, column, value):
+        if x not in self.o.index:
+            raise KeyError(f'{x} not in index')
 
-    @abc.abstractstaticmethod
-    def to_index(x):
-        """Map coordinate `x` to index label"""
-
-    @abc.abstractstaticmethod
-    def to_coordinate(label):
-        """Map index label to coordinate"""
+        self.o.at[x, column] = value
 
     def index_domain(self, index, copy=False):
-        return index.map(self.to_coordinate).to_numpy(dtype=self.dtype, copy=copy)
+        return index.to_numpy(dtype=self.dtype, copy=copy)
 
     def domain(self, copy=False):
-        return self.index_domain(self.o.index, copy)
-
-
-class ComplexIndexMixin:
-    @staticmethod
-    def to_index(x):
-        if x is not None:
-            return x.real, x.imag
-
-    @staticmethod
-    def to_coordinate(label):
-        return complex(*label)
-
-    @staticmethod
-    def multiindex_at(i, j, multiindex):
-        return multiindex[len(multiindex.levels[1])*i + j]
-
-
-class RealIndexMixin:
-    @staticmethod
-    def to_index(x):
-        return x
-
-    @staticmethod
-    def to_coordinate(label):
-        return label
-
-
-class IndexXFrame(IndexFrame):
-    def __getitem__(self, loc):
-        return self.o.loc[self.location(*loc)]
-
-    def __setitem__(self, loc, value):
-        self.o.loc[self.location(*loc)] = value
-
-    def location(self, xloc, column_loc):
-        return ((slice(*map(self.to_index, (xloc.start, xloc.stop)))
-                if isinstance(xloc, slice) else self.to_index(xloc)), column_loc)
-
-    def at(self, x, column):
-        return self.o.at[self.to_index(x), column]
-
-    def setat(self, x, column, value):
-        self.o.at[self.to_index(x), column] = value
-
-
-class IndexXYFrame(IndexFrame):
-    def __getitem__(self, loc):
-        return self.o.loc[tuple(map(self.location, loc))]
-
-    def __setitem__(self, loc, value):
-        self.o.loc[tuple(map(self.location, loc))] = value
-
-    def location(self, xloc):
-        return (slice(*map(self.to_index, (xloc.start, xloc.stop)))
-                if isinstance(xloc, slice) else self.to_index(xloc))
-
-    def at(self, x, y):
-        return self.o.at[self.to_index(x), self.to_index(y)]
-
-    def setat(self, x, y, value):
-        self.o.at[self.to_index(x), self.to_index(y)] = value
+        return self.index_domain(self.o.index, copy=copy)
 
 
 class PyplotShow:
@@ -212,3 +150,15 @@ class PyplotShow:
             return figure, axes
 
         return wrapper
+
+
+def index_from_product(*indices):
+    levels = []
+
+    for index in indices:
+        if isinstance(index, pandas.MultiIndex):
+            levels.extend(index.levels)
+        else:
+            levels.append(index)
+
+    return pandas.MultiIndex.from_product(levels)

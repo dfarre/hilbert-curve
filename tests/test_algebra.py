@@ -3,10 +3,9 @@ import unittest
 import pandas
 
 from hilbert import algebra
-from hilbert import fields
 from hilbert import spaces
 
-C2 = fields.R1Field.range(spaces.LebesgueCurveSpace, 0, 1, 2)
+C2 = spaces.CnSpace(2)
 
 
 class TensorProductTests(unittest.TestCase):

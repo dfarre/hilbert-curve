@@ -7,14 +7,11 @@ from hilbert import EQ_ROUND_TO
 from hilbert import algebra
 from hilbert import stock
 
-from hilbert.curves import lib
-from hilbert.curves import vectors
-
 
 @stock.FrozenLazyAttrs(('space', 'o'))
-class Operator(stock.Eq, stock.IndexXYFrame):
-    def __init__(self, data_frame, space):
-        super().__init__(data_frame)
+class Operator(stock.Eq, stock.WrappedDataFrame):
+    def __init__(self, space, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.space = space
 
     def __bool__(self):
@@ -33,13 +30,13 @@ class Operator(stock.Eq, stock.IndexXYFrame):
         return other.o
 
     def un(self, op):
-        return self.__class__(op(self.o), self.space)
+        return self.__class__(self.space, op(self.o))
 
     def bin(self, other, op):
-        return self.__class__(op(self.o, self.take(other)), self.space)
+        return self.__class__(self.space, op(self.o, self.take(other)))
 
     def rbin(self, other, op):
-        return self.__class__(op(self.take(other), self.o), self.space)
+        return self.__class__(self.space, op(self.take(other), self.o))
 
     def apply(self, function, *args, **kwargs):
         return self.un(lambda df: df.apply(function, *args, **kwargs))
@@ -54,7 +51,7 @@ class Operator(stock.Eq, stock.IndexXYFrame):
         return self.apply(lambda arr: algebra.PolarComplex.from_x(*arr), raw=True)
 
     def is_polar(self):
-        return set(self.o.dtypes) == {numpy.object}
+        return set(self.o.dtypes).pop() == numpy.object
 
     def where(self, condition, *args, **kwargs):
         return self.un(lambda df: df.where(condition, *args, **kwargs))
@@ -114,14 +111,11 @@ class Operator(stock.Eq, stock.IndexXYFrame):
         return self.rbin(other, operator.sub)
 
     def transform(self, vector):
-        return vector.__class__(self.space, lib.ImageCurve(
-            vector.image_type(series=self.o@vector.image.i)))
+        return vector.type(
+            self.space, image=algebra.Image(series=self.o@vector.image.i))
 
     def __matmul__(self, other):
-        if isinstance(other, vectors.Vector):
-            if not self.space == other.space:
-                raise NotImplementedError('Operator and vector not based on the same space')
-
+        if isinstance(other, algebra.Vector):
             return self.transform(other)
 
         return self.bin(other, operator.matmul)

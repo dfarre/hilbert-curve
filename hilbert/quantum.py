@@ -5,31 +5,39 @@ import pandas
 
 from hilbert import EQ_ROUND_TO
 
-from hilbert import fields
+from hilbert.algebra import PolarComplex as C
 from hilbert import spaces
 from hilbert import stock
 
 
 @stock.FrozenLazyAttrs(lazy_keys=('amplitudes', 'brakets', 'consistent'))
-class HistorySet(stock.RealIndexMixin, stock.IndexXYFrame):
-    def __init__(self, data_frame, system, description='History {label}'):
-        super().__init__(data_frame)
+class HistorySet(stock.WrappedDataFrame):
+    def __init__(self, system, *args, description='History {label}', **kwargs):
+        super().__init__(*args, **kwargs)
         self.system = system
         self.description = description
 
-    def simulate(self, **kwargs):
-        self.show(numpy.random.choice(self.o.index, p=self.distribution), **kwargs)
+    def simulate(self, step=None, **kwargs):
+        self.show(numpy.random.choice(self.o.columns, p=self.distribution),
+                  step, **kwargs)
 
-    def simulate_density(self, **kwargs):
-        self.show_density(numpy.random.choice(self.o.index, p=self.distribution), **kwargs)
+    def simulate_density(self, step=None, **kwargs):
+        self.show_density(numpy.random.choice(self.o.columns, p=self.distribution),
+                          step, **kwargs)
 
-    def show(self, label, **kwargs):
+    def show(self, label, step=None, **kwargs):
+        vectors = self.time_coarse(step)[label] if step else self.o[label]
         self.system.space.show_vectors(
-            *self[:, label], title=self.description.format(label=label), **kwargs)
+            *vectors, title=self.description.format(label=label), **kwargs)
 
-    def show_density(self, label, **kwargs):
+    def show_density(self, label, step=None, **kwargs):
+        vectors = self.time_coarse(step)[label] if step else self.o[label]
         self.system.space.show_vectors_density(
-            *self[:, label], title=self.description.format(label=label), **kwargs)
+            *vectors, title=self.description.format(label=label), **kwargs)
+
+    def time_coarse(self, step: int):
+        return self.o.reindex(index=[
+            self.o.index[i] for i in numpy.arange(0, len(self.o), step)])
 
     @stock.PyplotShow()
     def show_distribution(self, **kwargs):
@@ -74,24 +82,29 @@ class HistorySet(stock.RealIndexMixin, stock.IndexXYFrame):
 
 @stock.FrozenLazyAttrs(('space',))
 class System(metaclass=abc.ABCMeta):
-    def __init__(self, space):
-        self.space = space
+    def __init__(self, space, **attr):
+        self.space, self.attr = space, attr
 
     @abc.abstractmethod
     def __call__(self, tf, ti):
         """Return time development operator from `ti` to `tf`"""
 
-    def unitary_history(self, tf, ti, vector, length, label=0):
-        index = numpy.linspace(ti, tf, length)
-        return HistorySet(pandas.DataFrame({label: pandas.Series([
-            self(t, ti)@vector for t in index], index=index)}), self, 'Unitary {label}')
+    def __getitem__(self, ordinal):
+        return self.space.spaces[ordinal]
 
-    def show_evolution(self, tf, ti, vector, ncurves, label=0, **kwargs):
-        self.unitary_history(tf, ti, vector, ncurves, label).show(label, **kwargs)
+    def unitary_history(self, vector, tf, ti=0, length=None, label=0):
+        index = (numpy.arange(ti, tf, (tf - ti) // length if length else 1)
+                 if isinstance(tf - ti, int) and (not length or not (tf - ti) % length)
+                 else numpy.linspace(ti, tf, length))
 
-    def show_density_evolution(self, tf, ti, vector, ncurves, label=0, **kwargs):
-        self.unitary_history(
-            tf, ti, vector, ncurves, label).show_density(label, **kwargs)
+        return HistorySet(self, {label: pandas.Series([
+            self(t, ti)@vector for t in index], index=index)}, description='Unitary')
+
+    def show_evolution(self, vector, tf, ti=0, ncurves=None, label=0, **kwargs):
+        self.unitary_history(vector, tf, ti, ncurves, label).show(label, **kwargs)
+
+    def show_density_evolution(self, vector, tf, ti=0, ncurves=None, label=0, **kwargs):
+        self.unitary_history(vector, tf, ti, ncurves, label).show_density(label, **kwargs)
 
     def variance(self, operator, vector):
         return self.mean(operator@operator, vector) - self.mean(operator, vector)**2
@@ -101,6 +114,41 @@ class System(metaclass=abc.ABCMeta):
         return (vector@(operator@vector))/(vector@vector)
 
 
+@stock.FrozenLazyAttrs(lazy_keys=('hop_op',))
+class HoppingSystem(System):
+    """Discrete-time system"""
+
+    def __call__(self, tf, ti):
+        return self.space.operator(
+            numpy.linalg.matrix_power(self.hop_op.o.to_numpy(), tf - ti))
+
+    def collapse(self, vector, *x):
+        v = self.hop_op@(vector - sum(vector(ix)*self.space[ix, 'delta'] for ix in x))
+
+        if round(v.norm, EQ_ROUND_TO):
+            return v/v.norm
+
+    def collapsing_history(self, initial_vector, *x, go_on=lambda v: True, label=0):
+        vectors = [initial_vector/initial_vector.norm]
+
+        while go_on(vectors):
+            vector = self.collapse(vectors[-1], *x)
+
+            if vector is not None:
+                vectors.append(vector)
+
+                if any(round(abs(vector(ix)), EQ_ROUND_TO) == 1 for ix in x):
+                    description = 'Collapse'
+                    break
+            else:
+                description = 'Collapse'
+                break
+        else:
+            description = 'Escape'
+
+        return HistorySet(self, {label: pandas.Series(vectors)}, description=description)
+
+
 @stock.FrozenLazyAttrs(lazy_keys=('hamiltonian',))
 class HamiltonianSystem(System):
     def __call__(self, ti, tf):
@@ -108,9 +156,8 @@ class HamiltonianSystem(System):
 
 
 class R1System(System):
-    def __init__(self, lbound, rbound, dimension):
-        super().__init__(fields.R1Field.range(
-            spaces.LebesgueCurveSpace, lbound, rbound, dimension))
+    def __init__(self, lbound, rbound, dimension, **attr):
+        super().__init__(spaces.R1LebesgueSpace(lbound, rbound, dimension), **attr)
 
     @property
     def position_op(self):
@@ -124,42 +171,61 @@ class R1System(System):
         return F@Pp@F.dagger()
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('hop_op',))
-class ToyTrain(R1System):
-    def __call__(self, tf, ti):
-        return self.space.operator(
-            numpy.linalg.matrix_power(self.hop_op.o.to_numpy(), tf - ti))
+class R1C2System(System):
+    def __init__(self, lbound, rbound, length, **attr):
+        super().__init__(spaces.CurveSpaceProduct(
+            spaces.CnSpace(2), spaces.R1LebesgueSpace(lbound, rbound, length)
+        ), **attr)
 
+
+class ToyTrain(R1System, HoppingSystem):
     def _make_hop_op(self):
-        cols = list(self.space.Id.o)
-        return self.space.operator(self.space.Id.o[cols[1:]+cols[0:1]].to_numpy())
-
-    def collapse(self, vector, x):
-        v = self.hop_op@(vector - vector(x)*self.space[x, 'delta'])
-
-        if round(v.norm, EQ_ROUND_TO):
-            return v/v.norm
-
-    def collapsing_history(self, initial_vector, x):
-        vectors = [initial_vector/initial_vector.norm]
-
-        while True:
-            vector = self.collapse(vectors[-1], x)
-
-            if vector is not None:
-                vectors.append(vector)
-            else:
-                break
-
-        return pandas.Series(vectors)
+        return self.space.cycle_op
 
     def detection_histories(self, initial_vector, x):
-        phi = self.collapsing_history(initial_vector, x)
+        phi = self.collapsing_history(initial_vector, x).o[0]
         L = len(phi.index)
 
-        return HistorySet(pandas.DataFrame({tau: phi[:tau].append(pandas.Series(
+        return HistorySet(self, {tau: phi[:tau].append(pandas.Series(
             [self.space[x + 1 + i, 'delta'] for i in range(L - tau)], index=phi.index[tau:])
-        ) for tau in range(1, L + 1)}), self, 'Detection at t = {label}')
+        ) for tau in range(1, L + 1)}, description='Detection at t = {label}')
+
+
+class SplitToyTrain(R1C2System, HoppingSystem):
+    @property
+    def cell(self):
+        return self[1].bases.cell
+
+    def add_splitter(self, hop_op, x):
+        coef = 1/numpy.sqrt(2)
+        hop_op.put((1, x + self.cell), (1, x), coef)
+        hop_op.put((2, x + self.cell), (1, x), coef)
+        hop_op.put((1, x + self.cell), (2, x), -coef)
+        hop_op.put((2, x + self.cell), (2, x), coef)
+
+    def add_phase_shift(self, hop_op, ix, phase):
+        hop_op.put((ix[0], ix[1] + self.cell), ix, C(1, phase).number)
+
+    def _make_hop_op(self):
+        hop_op = self.space.cycle_op
+
+        for x in self.attr.get('splitters', ()):
+            self.add_splitter(hop_op, x)
+
+        for ix, phase in self.attr.get('phases', {}).items():
+            self.add_phase_shift(hop_op, ix, phase)
+
+        return hop_op
+
+    @classmethod
+    def mach_zehnder(cls, left_arm, inner_arm, right_arm=None, phases=(0, 0)):
+        right_arm = right_arm or left_arm
+        center = int(inner_arm/2)
+        length = left_arm + 1 + inner_arm + right_arm
+
+        return cls(-left_arm, inner_arm + right_arm, length,
+                   splitters=(0, inner_arm), phases={(1, center): phases[0],
+                                                     (2, center): phases[1]})
 
 
 class QuasiFreeParticleR1(R1System, HamiltonianSystem):

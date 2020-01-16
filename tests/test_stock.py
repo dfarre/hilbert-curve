@@ -1,7 +1,5 @@
 import unittest
 
-import pandas
-
 from hilbert import stock
 
 
@@ -41,12 +39,3 @@ class FrozenLazyAttrsTests(unittest.TestCase):
 
         for key in ('prop', 'prap'):
             self.assert_reset_raises(key)
-
-
-class ComplexIndexMixinTests(unittest.TestCase):
-    def test_multiindex_at(self):
-        index = pandas.MultiIndex.from_product([[1, 3, 5], [2, 4, 6]])
-
-        assert all([stock.ComplexIndexMixin.multiindex_at(
-            list(index.levels[0]).index(x), list(index.levels[1]).index(y), index
-        ) == (x, y) for x, y in index])

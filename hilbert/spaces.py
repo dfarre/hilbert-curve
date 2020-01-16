@@ -3,7 +3,7 @@ import abc
 import pandas
 import numpy
 
-from hilbert import EQ_ROUND_TO
+from hilbert import EQ_ROUND_TO, INDEX_ROUND_TO
 
 from hilbert import algebra
 from hilbert import fields
@@ -22,25 +22,44 @@ class InvalidVectorMade(Exception):
 
 @stock.FrozenLazyAttrs(('bases',))
 class Space(stock.Repr, metaclass=abc.ABCMeta):
-    def __init__(self, bases, validate_basis=False):
-        self.operator_type, self.image_type = (
-            (operators.COperator, vectors.CImage) if isinstance(bases, fields.C1Field) else
-            (operators.ROperator, vectors.RImage) if isinstance(bases, fields.R1Field) else
-            (None, None))
-
-        if self.operator_type is None:
-            raise NotImplementedError('`bases` argument should be a `Field`')
-
+    def __init__(self, bases: fields.FlatIndexField, validate_basis=False):
         self.bases, self.validate_basis = bases, validate_basis
 
     def __str__(self):
         return repr(self.bases)
 
     @property
+    def dimension(self):
+        return self.bases.dimension
+
+    @property
+    def index(self):
+        return self.bases.o.index
+
+    @property
+    def domain(self):
+        return self.bases.domain()
+
+    @property
+    def measure(self):
+        return self.bases.measure
+
+    @property
+    def spaces(self):
+        return [self]
+
+    @property
     def Id(self):
-        return self.operator_type(pandas.DataFrame(
-            numpy.identity(self.bases.dimension),
-            columns=self.bases.o.index, index=self.bases.o.index), self)
+        return self.operator(numpy.identity(self.dimension))
+
+    @property
+    def cycle_op(self):
+        cols = list(self.Id.o)
+        return self.operator(self.Id.o[cols[1:]+cols[0:1]].to_numpy())
+
+    def operator(self, *args, **kwargs):
+        return operators.Operator(
+            self, *args, columns=self.index, index=self.index, **kwargs)
 
     def __call__(self, *args, validate=True, **kwargs):
         vector = self.make_vector(*args, **kwargs)
@@ -49,6 +68,10 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
             self.validate(vector)
 
         return vector
+
+    def __setitem__(self, key, basis):
+        """Set basis"""
+        self.bases.o[key] = basis
 
     def __getitem__(self, loc):
         """Lazy basis vector definition using `loc` indexing"""
@@ -69,13 +92,13 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
                 def_method = self.try_def_method(key)
 
                 for ix in nans_at:
-                    self.bases.o.at[ix, key] = def_method(self.bases.to_coordinate(ix))
+                    self.bases.o.at[ix, key] = def_method(ix)
 
                 return self.bases[xloc, key]
         elif not isinstance(vec, algebra.Vector):
             def_method = self.try_def_method(key)
             vector = def_method(xloc)
-            self.bases.setat(xloc, key, vector)
+            self.bases.put(xloc, key, vector)
 
             return vector
 
@@ -89,12 +112,8 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
 
         return def_method
 
-    def __setitem__(self, key, basis):
-        """Set basis"""
-        self.bases.o[key] = basis
-
     @abc.abstractmethod
-    def make_vector(self, *args, **kwargs):
+    def make_vector(self, *args, series=None, **kwargs):
         """Vector instance constructor returning new vector"""
 
     @abc.abstractmethod
@@ -119,31 +138,34 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
                 if isinstance(vector, algebra.Vector) else vector)
 
     def extend(self, copies=1):
-        replicas = self.bases.replicas(copies)
-        vector_replicas = {key: list(
-            self.bases.yield_vector_replicas(key, copies, replicas))
-            for key in filter(lambda key: not self.is_analytic(key), self.bases.o)}
-        self.bases.extend_index(copies, replicas)
-        self.bases.update()
+        analytic = list(filter(lambda key: self.is_analytic(key), self.bases.o))
+        non_analytic = set(self.bases.o) - set(analytic)
 
-        for key in set(self.bases.o) - set(vector_replicas):
+        if non_analytic:
+            shifts = list(self.bases.replica_shifts(copies))
+
+        self.bases.extend_index(copies)
+
+        for key in non_analytic:
+            for z, v in self.bases.o[key].dropna().items():
+                for shift in shifts:
+                    c = z + shift
+                    ix = (complex(round(c.real, INDEX_ROUND_TO), round(c.imag, INDEX_ROUND_TO))
+                          if isinstance(c, complex) else round(c, INDEX_ROUND_TO))
+                    self.bases.put(ix, key, self.translate(v, shift))
+
+        for key in analytic:
             getattr(self, f'extend_{key}_basis')(copies)
 
-        for key, repls in vector_replicas.items():
-            for z, series in repls:
-                self.bases.setat(z, key, self(series=series, validate=False))
-
-    def operator(self, *args, **kwargs):
-        return self.operator_type(pandas.DataFrame(
-            *args, columns=self.bases.o.index, index=self.bases.o.index, **kwargs
-        ), self)
+    def translate(self, vector, shift):
+        return self(series=self.bases.translate(vector.image.i, shift))
 
     def op_from_callable(self, function, *apply_args, **apply_kwds):
         return self.operator().apply(function, *apply_args, **apply_kwds)
 
     def unitary_op(self, hermitian, validate=True):
         if validate and not hermitian.is_hermitian():
-            raise NotImplementedError('Operator.unitary requires an hermitian generator')
+            raise NotImplementedError('An Hermitian generator is required')
 
         H = (hermitian if not hermitian.is_polar() else hermitian.toggle_polar())
 
@@ -151,7 +173,7 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
 
     @property
     def fourier_op(self):
-        if not (self.operator_type == operators.ROperator and self.bases.dimension % 2 == 0):
+        if not (self.bases.dtype == numpy.float64 and self.bases.dimension % 2 == 0):
             raise NotImplementedError('Fourier basis is defined over ℝ with even dimension')
 
         return self.op_from_callable(self.fourier_basis_coords, axis=1)
@@ -221,7 +243,7 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
     @staticmethod
     def plot_vectors(vectors, top_ax, bottom_ax, title=None, **kwargs):
         for vector in vectors:
-            vector.full_plot(top_ax, bottom_ax, **kwargs)
+            vector.image.full_plot(top_ax, bottom_ax, **kwargs)
 
         top_ax.yaxis.set_label_text('Re')
         bottom_ax.yaxis.set_label_text('Im')
@@ -235,17 +257,12 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
     @staticmethod
     def plot_vectors_density(vectors, axes, **kwargs):
         for vector in vectors:
-            vector.density_plot(axes, **kwargs)
+            vector.image.density_plot(axes, **kwargs)
 
         axes.yaxis.set_label_text('abs²')
         axes.grid()
 
         return axes
-
-
-class SpaceProduct:
-    def __init__(self, *spaces):
-        self.spaces = spaces
 
 
 class LebesgueCurveSpace(Space):
@@ -259,18 +276,17 @@ class LebesgueCurveSpace(Space):
 
     def make_vector(self, *args, series=None, **kwargs):
         if series is None:
-            return vectors.Vector(self, *args, **kwargs)
+            return vectors.CurveVector(self, *args, **kwargs)
 
-        return vectors.Vector(self, lib.ImageCurve(self.image_type(
-            series=series.reindex(index=self.bases.o.index, fill_value=0))))
+        return vectors.CurveVector(self, image=algebra.Image(
+            series=series.reindex(index=self.index, fill_value=0)))
 
     def scale_basis_vector(self, k, vector):
         return vector.__class__(self, *(
             c.scale(self.norm_scale_factor(k), k) for c in vector.curves))
 
     def norm_scale_factor(self, k):
-        return {operators.ROperator: 1/numpy.sqrt(k),
-                operators.COperator: 1/k}[self.operator_type]
+        return {numpy.float64: 1/numpy.sqrt(k), numpy.complex128: 1/k}[self.bases.dtype]
 
     def extend_delta_basis(self, copies):
         """Nothing to do - ready to be extended on demand"""
@@ -283,4 +299,53 @@ class LebesgueCurveSpace(Space):
         for vector in vectors:
             p = -vector.curves[0].parameters[1].imag
             new_x = p_series[(p_series - p).round(EQ_ROUND_TO) == 0].index[0]
-            self.bases.setat(new_x, 'fourier', vector/numpy.sqrt(2*copies + 1))
+            self.bases.put(new_x, 'fourier', vector/numpy.sqrt(2*copies + 1))
+
+
+class CurveSpaceProduct(LebesgueCurveSpace):
+    def __init__(self, *spaces):
+        self._spaces = spaces
+
+    @property
+    def spaces(self):
+        return self._spaces
+
+    def __str__(self):
+        return repr(self.spaces)
+
+    def __getitem__(self, loc):
+        """Get a product of basis vectors"""
+        ix, keys = loc
+
+        if isinstance(keys, str):
+            keys = (keys,)*len(self.spaces)
+
+        return algebra.TensorProduct(*(s[x, k] for s, x, k in zip(self.spaces, ix, keys)))
+
+    @property
+    def measure(self):
+        return numpy.prod([space.measure for space in self.spaces])
+
+    @property
+    def dimension(self):
+        return numpy.prod([space.dimension for space in self.spaces])
+
+    @property
+    def index(self):
+        return stock.index_from_product(*(s.bases.o.index for s in self.spaces))
+
+
+class R2LebesgueSpace(LebesgueCurveSpace):
+    def __init__(self, sw, ne, re_cells, im_cells=None, validate_basis=False, **kwargs):
+        super().__init__(fields.R2Field(sw, ne, re_cells, im_cells=im_cells, **kwargs),
+                         validate_basis)
+
+
+class R1LebesgueSpace(LebesgueCurveSpace):
+    def __init__(self, start, end, cells, validate_basis=False, **kwargs):
+        super().__init__(fields.R1Field(start, end, cells, **kwargs), validate_basis)
+
+
+class CnSpace(R1LebesgueSpace):
+    def __init__(self, dimension, validate_basis=False, **kwargs):
+        super().__init__(1, dimension, dimension,  validate_basis, **kwargs)

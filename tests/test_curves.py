@@ -3,14 +3,13 @@ import unittest
 
 import numpy
 
-from hilbert import fields
 from hilbert import spaces
 
 from hilbert.curves import lib
 
-R0to1L2 = fields.R1Field.range(spaces.LebesgueCurveSpace, 0, 1, 101)
-SymRm1to1L2 = fields.R1Field.range(spaces.LebesgueCurveSpace, -1, 1, 201)
-C1L2 = fields.C1Field.rectangle(spaces.LebesgueCurveSpace, -1 - 1j, 1 + 1j, 301)
+R0to1L2 = spaces.R1LebesgueSpace(0, 1, 101)
+SymRm1to1L2 = spaces.R1LebesgueSpace(-1, 1, 201)
+R2L2 = spaces.R2LebesgueSpace(-1 - 1j, 1 + 1j, 301)
 
 PW = 2*R0to1L2(lib.PiecewiseCurve([0.13], [lib.XtoA(1/2, 6/5), -lib.Exp(1, -1/2)]))
 
@@ -33,13 +32,13 @@ class CurveLibTests(unittest.TestCase):
         assert PW.kind() == 'PW:XtoA[0.13]Exp'
 
     def test_piecewise_str(self):
-        assert repr(PW) == '<Vector: (1.0)x^(1.2) | (-2)exp(-0.5)x>'
+        assert repr(PW) == '<CurveVector: (1.0)x^(1.2) | (-2)exp(-0.5)x>'
 
     def test_delta_format(self):
-        z = complex(*random.choice(C1L2.bases.o.index))
-        delta = C1L2(lib.Delta(1/numpy.sqrt(C1L2.bases.measure), pole=z))
+        z = random.choice(R2L2.bases.o.index)
+        delta = R2L2(lib.Delta(1/numpy.sqrt(R2L2.bases.measure), pole=z))
 
-        assert repr(delta) == f'<Vector: (150.0)δ(x - {z})>'
+        assert repr(delta) == f'<CurveVector: (150.0)δ(x - {z})>'
 
     def test_gaussian_format__real(self):
         assert str(lib.Gaussian(3.01, -1.2, 0)) == '(3.01)exp(-1.2)x²'
@@ -69,9 +68,9 @@ class CurveEqualityTests(unittest.TestCase):
 
 class ComplexCurveAlgebraTests(unittest.TestCase):
     def test(self):
-        z = complex(*random.choice(C1L2.bases.o.index))
-        u = C1L2(lib.Exp(1, -1/2))
-        value = C1L2[z, 'delta']@u/numpy.sqrt(C1L2.bases.measure)
+        z = random.choice(R2L2.bases.o.index)
+        u = R2L2(lib.Exp(1, -1/2))
+        value = R2L2[z, 'delta']@u/numpy.sqrt(R2L2.bases.measure)
 
         self.assertAlmostEqual(value, u(z), places=6)
         self.assertAlmostEqual(value, numpy.exp(-0.5*z), places=6)
@@ -80,7 +79,7 @@ class ComplexCurveAlgebraTests(unittest.TestCase):
 
 class RealCurveAlgebraTests(unittest.TestCase):
     def test_radd(self):
-        shifted = '<Vector: (0.5)(x + 2)log(x + 2) + (1.9)>'
+        shifted = '<CurveVector: (0.5)(x + 2)log(x + 2) + (1.9)>'
 
         assert repr(1.9 + SymRm1to1L2(lib.Xlog(1/2, pole=-2))) == shifted
 
@@ -93,8 +92,6 @@ class RealCurveAlgebraTests(unittest.TestCase):
         vector = numpy.dot(u - v, w)
         value = SymRm1to1L2[-0.11, 'delta']@vector/numpy.sqrt(SymRm1to1L2.bases.measure)
 
-        assert repr(vector) == '<Vector: (-0.5)(x + 2)log(x + 2) + (-3.14)/(x + 2)' \
-            ' + (3) + (2) + (2)x>'
         self.assertAlmostEqual(value, vector(-0.11), places=12)
         self.assertAlmostEqual(
             value, 3 - 0.5*(-0.11 + 2)*numpy.log(-0.11 + 2) - 3.14/(-0.11 + 2) + 2 - 2*0.11,
@@ -104,7 +101,7 @@ class RealCurveAlgebraTests(unittest.TestCase):
         vector = +2*R0to1L2(lib.XtoA(1/2, 6/5))/5 - 1
         value = R0to1L2[0.8, 'delta'] @ vector / numpy.sqrt(SymRm1to1L2.bases.measure)
 
-        assert repr(vector) == '<Vector: (0.2)x^(1.2) + (-1)>'
+        assert repr(vector) == '<CurveVector: (0.2)x^(1.2) + (-1)>'
         self.assertAlmostEqual(value, vector(0.8), places=12)
         self.assertAlmostEqual(value, -1 + 0.2*0.8**1.2, places=12)
 

@@ -4,8 +4,6 @@ import abc
 import numpy
 from numpy.polynomial import polynomial
 
-from hilbert import EQ_ROUND_TO
-
 from hilbert import algebra
 from hilbert import stock
 
@@ -206,24 +204,3 @@ class InverseXPolynomial(LinearCurve):
     def format(self, *params):
         return ' + '.join(reversed([f'({param}){self.svar(-n - 1)}'
                                     for n, param in enumerate(reversed(params))]))
-
-
-@stock.FrozenLazyAttrs(('image',))
-class ImageCurve(Curve):
-    """General, non-analytical definition for vectors"""
-
-    def __init__(self, image):
-        super().__init__(pole=0)
-        self.image = image
-
-    def __str__(self):
-        return str(self.image)
-
-    def eqkey(self):
-        return self.pole, tuple(self.image.i.round(EQ_ROUND_TO))
-
-    def num_prod(self, number):
-        return self.__class__(self.image.__class__(series=number*self.image.i))
-
-    def evaluate(self, s: numpy.array):
-        return numpy.array([self.image[x] for x in s])
