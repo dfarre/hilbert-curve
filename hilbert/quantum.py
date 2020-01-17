@@ -124,24 +124,19 @@ class HoppingSystem(System):
 
     def collapse(self, vector, *x):
         v = self.hop_op@(vector - sum(vector(ix)*self.space[ix, 'delta'] for ix in x))
-
-        if round(v.norm, EQ_ROUND_TO):
-            return v/v.norm
+        return v/v.norm
 
     def collapsing_history(self, initial_vector, *x, go_on=lambda v: True, label=0):
         vectors = [initial_vector/initial_vector.norm]
 
         while go_on(vectors):
             vector = self.collapse(vectors[-1], *x)
+            vectors.append(vector)
+            weights = pandas.Series([vector(ix) for ix in x], index=x).abs()**2
 
-            if vector is not None:
-                vectors.append(vector)
-
-                if any(round(abs(vector(ix)), EQ_ROUND_TO) == 1 for ix in x):
-                    description = 'Collapse'
-                    break
-            else:
-                description = 'Collapse'
+            if round(weights.sum(), EQ_ROUND_TO) == 1:
+                w = numpy.round(weights, EQ_ROUND_TO)
+                description = f'Collapse into {list(w[w!=0].index)}'
                 break
         else:
             description = 'Escape'
