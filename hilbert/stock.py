@@ -102,52 +102,6 @@ class FrozenLazyAttrs:
         return getattr(instance, f'_{key}')
 
 
-class Attr:
-    _marked_getters = collections.defaultdict(list)
-
-    def __init__(self):
-        self._attr_cache = {}
-
-    @classmethod
-    def __init_subclass__(cls):
-        cls._attr_tree = collections.defaultdict(set)
-        cls._attr_targets = collections.defaultdict(set)
-
-        for method in Attr._marked_getters[f'{cls.__module__}.{cls.__name__}']:
-            setattr(cls, method.__name__, cls._make_getter(method))
-
-    @classmethod
-    def _make_getter(cls, method):
-        arg_names = inspect.getargspec(method)[0]
-        cls._attr_tree[method.__name__].update(set(arg_names) - set(cls._attr_tree))
-
-        for key in set(arg_names) & set(cls._attr_tree):
-            cls._attr_tree[method.__name__].update(cls._attr_tree[key])
-
-        for key in cls._attr_tree[method.__name__]:
-            cls._attr_targets[key].add(method.__name__)
-
-        @functools.wraps(method)
-        @property
-        def getter_method(self):
-            return self._attr_cache.setdefault(method.__name__, method(*(
-                getattr(self, name) for name in arg_names)))
-
-        return getter_method
-
-    @classmethod
-    def getter(cls, method):
-        Attr._marked_getters[Attr.get_method_class_path(method)].append(method)
-        return method
-
-    def __setattr__(self, key, value):
-        super().__setattr__(key, value)
-
-        if key in self._attr_targets:
-            for target_key in self._attr_targets[key] & set(self._attr_cache):
-                del self._attr_cache[target_key]
-
-
 class WrappedDataFrame(Repr):
     """Pandas data frame wrapper - an alternative to subclassing"""
     dtype = None
