@@ -1,3 +1,4 @@
+import time
 import unittest
 
 import pandas
@@ -41,6 +42,52 @@ class FrozenLazyAttrsTests(unittest.TestCase):
 
         for key in ('prop', 'prap'):
             self.assert_reset_raises(key)
+
+
+class Klass(stock.Attr):
+    def __init__(self, sleep_time, **kwargs):
+        super().__init__()
+
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+        self.sleep_time = sleep_time
+
+    @stock.Attr.getter
+    def ab(self, a, b):
+        time.sleep(self.sleep_time)
+        return a + b
+
+    @stock.Attr.getter
+    def abc(self, ab, c):
+        time.sleep(self.sleep_time)
+        return ab * c
+
+
+class AttrTests(unittest.TestCase):
+    def setUp(self):
+        self.obj = Klass(0.00001, a=2, b=-5, c=3)
+
+    def test(self):
+        self.assert_time_property('ab', -3, slow=True)
+        self.assert_time_property('ab', -3, slow=False)
+        self.assert_time_property('abc', -9, slow=True)
+        self.assert_time_property('abc', -9, slow=False)
+        self.obj.b = 0
+        self.assert_time_property('abc', 6, slow=True)
+        self.assert_time_property('abc', 6, slow=False)
+
+    def assert_time_property(self, name, expected_value, slow=False):
+        t0 = time.time()
+        value = getattr(self.obj, name)
+        t = time.time() - t0
+
+        assert value == expected_value
+
+        if slow is True:
+            assert t > self.obj.sleep_time
+        else:
+            assert t < self.obj.sleep_time
 
 
 class ComplexIndexMixinTests(unittest.TestCase):
