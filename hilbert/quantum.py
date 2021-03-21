@@ -1,4 +1,5 @@
 import abc
+import math
 
 import numpy
 import pandas
@@ -10,12 +11,13 @@ from hilbert import spaces
 from hilbert import stock
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('amplitudes', 'brakets', 'consistent'))
+@stock.FrozenLazyAttrs(lazy_keys=('chains', 'brakets', 'consistent'))
 class HistorySet(stock.WrappedDataFrame):
-    def __init__(self, system, *args, description='History {label}', **kwargs):
+    def __init__(self, system, *args, description='History {label}', attr=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.system = system
         self.description = description
+        self.attr = attr or {}
 
     def simulate(self, step=None, **kwargs):
         self.show(numpy.random.choice(self.o.columns, p=self.distribution),
@@ -63,6 +65,16 @@ class HistorySet(stock.WrappedDataFrame):
     def weight(self):
         return (self.amplitudes.abs()**2).sum()
 
+    @property
+    def amplitudes(self):
+        return self.chains.apply(lambda s: s.prod())
+
+    def _make_chains(self):
+        return pandas.DataFrame({k: [self.o[k].iat[i]@(
+            self.system(self.o.index[i], self.o.index[i-1])@(self.o[k].iat[i-1]))
+            for i in range(1, len(self.o.index))] for k in self.o.columns
+        }, index=self.o.index[1:])
+
     def _make_consistent(self):
         return not (self.brakets.to_numpy().real - numpy.diag(self.amplitudes.abs()**2)
                     ).round(EQ_ROUND_TO).any()
@@ -72,12 +84,6 @@ class HistorySet(stock.WrappedDataFrame):
         return pandas.DataFrame({b: pandas.Series([
             self.amplitudes[a].conjugate()*self.amplitudes[b]*(self[tf, a]@self[tf, b])
             for a in self.o.columns], index=self.o.columns) for b in self.o.columns})
-
-    def _make_amplitudes(self):
-        return pandas.Series([numpy.product([self.o[k].iat[i]@(
-            self.system(self.o.index[i], self.o.index[i-1])@(self.o[k].iat[i-1]))
-            for i in range(1, len(self.o.index))]) for k in self.o.columns
-        ], index=self.o.columns)
 
 
 @stock.FrozenLazyAttrs(('space',))
@@ -126,7 +132,7 @@ class HoppingSystem(System):
         v = self.hop_op@(vector - sum(vector(ix)*self.space[ix, 'delta'] for ix in x))
         return v/v.norm
 
-    def collapsing_history(self, initial_vector, *x, go_on=lambda v: True, label=0):
+    def collapsing_histories(self, initial_vector, *x, go_on=lambda v: True):
         vectors = [initial_vector/initial_vector.norm]
 
         while go_on(vectors):
@@ -136,12 +142,15 @@ class HoppingSystem(System):
 
             if round(weights.sum(), EQ_ROUND_TO) == 1:
                 w = numpy.round(weights, EQ_ROUND_TO)
-                description = f'Collapse into {list(w[w!=0].index)}'
+                points = list(w[w != 0].index)
                 break
         else:
-            description = 'Escape'
+            return HistorySet(self, {len(vectors) - 1: pandas.Series(vectors)},
+                              description='Escape at t = {label}')
 
-        return HistorySet(self, {label: pandas.Series(vectors)}, description=description)
+        return HistorySet(self, {ix: pandas.Series(
+            vectors + [self.hop_op@(self.space[ix, 'delta'])]) for ix in points
+        }, description='Collapse at {label}')
 
 
 @stock.FrozenLazyAttrs(lazy_keys=('hamiltonian',))
@@ -191,36 +200,27 @@ class SplitToyTrain(R1C2System, HoppingSystem):
     def cell(self):
         return self[1].bases.cell
 
-    def add_splitter(self, hop_op, x):
-        coef = 1/numpy.sqrt(2)
-        hop_op.put((1, x + self.cell), (1, x), coef)
-        hop_op.put((2, x + self.cell), (1, x), coef)
-        hop_op.put((1, x + self.cell), (2, x), -coef)
-        hop_op.put((2, x + self.cell), (2, x), coef)
-
-    def add_phase_shift(self, hop_op, ix, phase):
-        hop_op.put((ix[0], ix[1] + self.cell), ix, C(1, phase).number)
+    def add_splitter(self, hop_op, x, theta=numpy.pi/4, phi=0):
+        hop_op.put((1, x + self.cell), (1, x), math.cos(theta)*C(1, phi).number)
+        hop_op.put((2, x + self.cell), (1, x), math.sin(theta))
+        hop_op.put((1, x + self.cell), (2, x), -math.sin(theta)*C(1, phi).number)
+        hop_op.put((2, x + self.cell), (2, x), math.cos(theta))
 
     def _make_hop_op(self):
         hop_op = self.space.cycle_op
 
-        for x in self.attr.get('splitters', ()):
-            self.add_splitter(hop_op, x)
-
-        for ix, phase in self.attr.get('phases', {}).items():
-            self.add_phase_shift(hop_op, ix, phase)
+        for kw in self.attr.get('splitters', ()):
+            self.add_splitter(hop_op, **kw)
 
         return hop_op
 
     @classmethod
-    def mach_zehnder(cls, left_arm, inner_arm, right_arm=None, phases=(0, 0)):
+    def mach_zehnder(cls, left_arm, inner_arm, right_arm=None, split0kw=None, split1kw=None):
         right_arm = right_arm or left_arm
-        center = int(inner_arm/2)
         length = left_arm + 1 + inner_arm + right_arm
+        splitters = ({'x': 0, **(split0kw or {})}, {'x': inner_arm, **(split1kw or {})})
 
-        return cls(-left_arm, inner_arm + right_arm, length,
-                   splitters=(0, inner_arm), phases={(1, center): phases[0],
-                                                     (2, center): phases[1]})
+        return cls(-left_arm, inner_arm + right_arm, length, splitters=splitters)
 
 
 class QuasiFreeParticleR1(R1System, HamiltonianSystem):
