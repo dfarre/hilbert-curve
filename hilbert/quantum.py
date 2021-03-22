@@ -11,7 +11,6 @@ from hilbert import spaces
 from hilbert import stock
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('chains', 'brakets', 'consistent'))
 class HistorySet(stock.WrappedDataFrame):
     def __init__(self, system, *args, description='History {label}', attr=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -50,46 +49,49 @@ class HistorySet(stock.WrappedDataFrame):
         axes.set_title(self.description.format(label='({0} ± {1})'.format(*self.mean_std)))
         axes.grid()
 
-    @property
-    def mean_std(self):
-        p = self.distribution
+    @stock.Attr.getter
+    def mean_std(self, distribution):
+        p = distribution
         mean = round(p@p.index, EQ_ROUND_TO)
 
         return mean, round(numpy.sqrt(p@(p.index - mean)**2), EQ_ROUND_TO)
 
-    @property
-    def distribution(self):
-        return (self.amplitudes.abs()**2)/self.weight
+    @stock.Attr.getter
+    def distribution(self, amplitudes, weight):
+        return (amplitudes.abs()**2)/weight
 
-    @property
-    def weight(self):
-        return (self.amplitudes.abs()**2).sum()
+    @stock.Attr.getter
+    def weight(self, amplitudes):
+        return (amplitudes.abs()**2).sum()
 
-    @property
-    def amplitudes(self):
-        return self.chains.apply(lambda s: s.prod())
-
-    def _make_chains(self):
-        return pandas.DataFrame({k: [self.o[k].iat[i]@(
-            self.system(self.o.index[i], self.o.index[i-1])@(self.o[k].iat[i-1]))
-            for i in range(1, len(self.o.index))] for k in self.o.columns
-        }, index=self.o.index[1:])
-
-    def _make_consistent(self):
-        return not (self.brakets.to_numpy().real - numpy.diag(self.amplitudes.abs()**2)
+    @stock.Attr.getter
+    def consistent(self, brakets, amplitudes):
+        return not (brakets.to_numpy().real - numpy.diag(amplitudes.abs()**2)
                     ).round(EQ_ROUND_TO).any()
 
-    def _make_brakets(self):
+    @stock.Attr.getter
+    def brakets(self, amplitudes):
         tf = self.o.index[-1]
         return pandas.DataFrame({b: pandas.Series([
-            self.amplitudes[a].conjugate()*self.amplitudes[b]*(self[tf, a]@self[tf, b])
+            amplitudes[a].conjugate()*amplitudes[b]*(self[tf, a]@self[tf, b])
             for a in self.o.columns], index=self.o.columns) for b in self.o.columns})
 
+    @stock.Attr.getter
+    def amplitudes(self, chains):
+        return chains.apply(lambda s: s.prod())
 
-@stock.FrozenLazyAttrs(('space',))
-class System(metaclass=abc.ABCMeta):
-    def __init__(self, space, **attr):
-        self.space, self.attr = space, attr
+    @stock.Attr.getter
+    def chains(self, o):
+        return pandas.DataFrame({k: [o[k].iat[i]@(
+            self.system(o.index[i], o.index[i-1])@(o[k].iat[i-1]))
+            for i in range(1, len(o.index))] for k in o.columns
+        }, index=o.index[1:])
+
+
+class System(stock.Attr, metaclass=abc.ABCMeta):
+    def __init__(self, space):
+        super().__init__(space)
+        self.space = space
 
     @abc.abstractmethod
     def __call__(self, tf, ti):
@@ -120,7 +122,11 @@ class System(metaclass=abc.ABCMeta):
         return (vector@(operator@vector))/(vector@vector)
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('hop_op',))
+class HamiltonianSystem(System):
+    def __call__(self, ti, tf):
+        return self.space.unitary_op(-self.hamiltonian*(tf - ti), validate=False)
+
+
 class HoppingSystem(System):
     """Discrete-time system"""
 
@@ -153,21 +159,15 @@ class HoppingSystem(System):
         }, description='Collapse at {label}')
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('hamiltonian',))
-class HamiltonianSystem(System):
-    def __call__(self, ti, tf):
-        return self.space.unitary_op(-self.hamiltonian*(tf - ti), validate=False)
-
-
 class R1System(System):
     def __init__(self, lbound, rbound, dimension, **attr):
         super().__init__(spaces.R1LebesgueSpace(lbound, rbound, dimension), **attr)
 
-    @property
+    @stock.Attr.getter
     def position_op(self):
         return self.space.operator(numpy.diag(self.space.bases.domain()))
 
-    @property
+    @stock.Attr.getter
     def momentum_op(self):
         Pp = self.space.operator(numpy.diag(self.space.fourier_labels))
         F = self.space.fourier_op
@@ -183,8 +183,9 @@ class R1C2System(System):
 
 
 class ToyTrain(R1System, HoppingSystem):
-    def _make_hop_op(self):
-        return self.space.cycle_op
+    @stock.Attr.getter
+    def hop_op(self, space):
+        return space.cycle_op
 
     def detection_histories(self, initial_vector, x):
         phi = self.collapsing_history(initial_vector, x).o[0]
@@ -224,7 +225,8 @@ class SplitToyTrain(R1C2System, HoppingSystem):
 
 
 class QuasiFreeParticleR1(R1System, HamiltonianSystem):
-    def _make_hamiltonian(self):
+    @stock.Attr.getter
+    def hamiltonian(self):
         Hp = self.space.operator(numpy.diag(self.space.fourier_labels**2))
         F = self.space.fourier_op
 

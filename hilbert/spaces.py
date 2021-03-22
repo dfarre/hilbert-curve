@@ -20,9 +20,10 @@ class InvalidVectorMade(Exception):
     """Raised for wrong vector input"""
 
 
-@stock.FrozenLazyAttrs(('bases',))
-class Space(stock.Repr, metaclass=abc.ABCMeta):
+class Space(stock.Repr, stock.Attr, metaclass=abc.ABCMeta):
     def __init__(self, bases: fields.FlatIndexField, validate_basis=False):
+        super().__init__()
+
         self.bases, self.validate_basis = bases, validate_basis
 
     def __str__(self):
@@ -171,17 +172,17 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
 
         return self.operator(linalg.expm(1j*H.o.to_numpy()))
 
-    @property
-    def fourier_op(self):
-        if not (self.bases.dtype == numpy.float64 and self.bases.dimension % 2 == 0):
+    @stock.Attr.getter
+    def fourier_op(self, bases):
+        if not (self.operator_type == operators.ROperator and bases.dimension % 2 == 0):
             raise NotImplementedError('Fourier basis is defined over ℝ with even dimension')
 
         return self.op_from_callable(self.fourier_basis_coords, axis=1)
 
-    @property
-    def fourier_labels(self):
-        return pandas.Series(self.fourier_label(self.bases.domain()),
-                             index=self.bases.o.index, name='p')
+    @stock.Attr.getter
+    def fourier_labels(self, bases):
+        return pandas.Series(self.fourier_label(bases.domain()),
+                             index=bases.o.index, name='p')
 
     def fourier_label(self, x):
         return 2*numpy.pi*(
@@ -309,6 +310,66 @@ class CurveSpaceProduct(LebesgueCurveSpace):
     @property
     def spaces(self):
         return self._spaces
+
+
+class Field(stock.Attr, stock.IndexXFrame, metaclass=abc.ABCMeta):
+    dtype = None
+
+    @stock.Attr.getter
+    def dimension(self, o):
+        return len(o.index)
+
+    @abc.abstractproperty
+    def measure(self):
+        """The cell measure"""
+
+    @abc.abstractproperty
+    def bounds(self):
+        """Return the boundary values as [min, max], ..."""
+
+    @abc.abstractproperty
+    def limits(self):
+        """Return the 'open' limits as (l, r), ..."""
+
+    @abc.abstractproperty
+    def cell_limits(self):
+        """Return cell boundary values as (b0, b1, ...), ... for each dimension"""
+
+    @abc.abstractmethod
+    def scale_index(self, k):
+        """Scale the index by `k`"""
+
+    @abc.abstractmethod
+    def scale_cell(self, k):
+        """Scale the unit cell length by `k`"""
+
+    @abc.abstractmethod
+    def replicas(self, copies):
+        """Replicate the index from its boundaries - return array of replicas"""
+
+    @abc.abstractmethod
+    def yield_vector_replicas(self, key, copies, index_replicas):
+        """Yield all new `z, series` tuples for basis `key`"""
+
+    @abc.abstractmethod
+    def extend_index(self, copies, index_replicas):
+        """Reindex from the replicas"""
+
+    @abc.abstractmethod
+    def plot_domain(self, **kwargs):
+        """Show space domain"""
+
+    def update(self):
+        self.o = self.o.apply(lambda s: s.map(
+            lambda v: v.update() if isinstance(v, algebra.Vector) else v))
+
+
+class R1Field(stock.RealIndexMixin, Field):
+    dtype = numpy.float64
+
+    def __init__(self, cell, *args, **kwargs):
+        super().__init__(pandas.DataFrame(*args, **kwargs))
+        self.cell = cell
 
     def __str__(self):
         return repr(self.spaces)

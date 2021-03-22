@@ -8,7 +8,7 @@ from hilbert import algebra
 from hilbert import stock
 
 
-@stock.FrozenLazyAttrs(('space', 'o'))
+@stock.FrozenAttrs('space', 'o')
 class Operator(stock.Eq, stock.WrappedDataFrame):
     def __init__(self, space, *args, **kwargs):
         super().__init__(*args, **kwargs)

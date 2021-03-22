@@ -16,8 +16,8 @@ class InvalidParameters(Exception):
 
 # Abstract base curves #########################################################
 
-@stock.FrozenLazyAttrs(('parameters', 'pole'))
-class Curve(stock.Repr, stock.Hashable, algebra.Scalable, metaclass=abc.ABCMeta):
+@stock.FrozenAttrs('parameters', 'pole')
+class Curve(stock.Repr, stock.Hashable, algebra.Scaleable, metaclass=abc.ABCMeta):
     min_dof = None
 
     def __init__(self, *parameters, pole=0):
@@ -91,7 +91,7 @@ class BasisCurve(Curve):
 
 # Piecewise curves #############################################################
 
-@stock.FrozenLazyAttrs(('jumps_at', 'piece_count', 'curves'))
+@stock.FrozenAttrs('jumps_at', 'piece_count', 'curves')
 class PiecewiseCurve(Curve):
     def __init__(self, jumps_at, curves):
         super().__init__(pole=0)
@@ -204,3 +204,24 @@ class InverseXPolynomial(LinearCurve):
     def format(self, *params):
         return ' + '.join(reversed([f'({param}){self.svar(-n - 1)}'
                                     for n, param in enumerate(reversed(params))]))
+
+
+@stock.FrozenAttrs('image')
+class ImageCurve(Curve):
+    """General, non-analytical definition for vectors"""
+
+    def __init__(self, image):
+        super().__init__(pole=0)
+        self.image = image
+
+    def __str__(self):
+        return str(self.image)
+
+    def eqkey(self):
+        return self.pole, tuple(self.image.i.round(EQ_ROUND_TO))
+
+    def num_prod(self, number):
+        return self.__class__(self.image.__class__(series=number*self.image.i))
+
+    def evaluate(self, s: numpy.array):
+        return numpy.array([self.image[x] for x in s])

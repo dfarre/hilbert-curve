@@ -2,8 +2,11 @@ import abc
 import collections
 import functools
 import inspect
+<<<<<<< HEAD
 
 import pandas
+=======
+>>>>>>> master
 
 from matplotlib import pyplot
 
@@ -48,9 +51,9 @@ class ImmutableReset(Exception):
     """Raised on reset try of immutable attributes"""
 
 
-class FrozenLazyAttrs:
-    def __init__(self, frozen_keys=(), lazy_keys=()):
-        self.frozen_keys, self.lazy_keys = frozen_keys, lazy_keys
+class FrozenAttrs:
+    def __init__(self, *frozen_keys):
+        self.frozen_keys = frozen_keys
 
     def __call__(self, cls):
         self.init_keys(cls)
@@ -60,14 +63,10 @@ class FrozenLazyAttrs:
             setattr(cls, key, property(
                 functools.partial(self.get, key), functools.partial(self.set, key)))
 
-        for key in self.lazy_keys:
-            setattr(cls, key, property(
-                functools.partial(self.setget, key), functools.partial(self.set, key)))
-
         return cls
 
     def init_keys(self, obj):
-        self_frozen = dict.fromkeys(self.frozen_keys + self.lazy_keys, False)
+        self_frozen = dict.fromkeys(self.frozen_keys, False)
         obj._frozen = {**getattr(obj, '_frozen', {}), **self_frozen}
 
     def decorate_init(self, function):
@@ -87,19 +86,74 @@ class FrozenLazyAttrs:
         instance._frozen[key] = True
 
     @staticmethod
-    def setget(key, instance):
-        if instance._frozen[key] is False:
-            value = getattr(instance, f'_make_{key}')()
-            setattr(instance, f'_{key}', value)
-            instance._frozen[key] = True
+    def get(key, instance):
+        return getattr(instance, f'_{key}')
+
+
+class Attr:
+    _marked_getters = collections.defaultdict(list)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._attr_cache = {}
+
+    @classmethod
+    def __init_subclass__(cls):
+        cls._attr_tree = collections.defaultdict(set)
+        cls._attr_targets = collections.defaultdict(set)
+        cls_path = f'{cls.__module__}.{cls.__name__}'
+
+        for method in Attr._marked_getters[cls_path]:
+            setattr(cls, method.__name__, property(cls._make_getter(method)))
+
+        del Attr._marked_getters[cls_path]
+
+    @classmethod
+    def _make_getter(cls, method):
+        _, *arg_names = inspect.getargspec(method)[0]
+
+        if arg_names:
+            cls._attr_tree[method.__name__].update(set(arg_names) - set(cls._attr_tree))
+
+            for key in set(arg_names) & set(cls._attr_tree):
+                cls._attr_tree[method.__name__].update(cls._attr_tree[key])
+
+            for key in cls._attr_tree[method.__name__]:
+                cls._attr_targets[key].add(method.__name__)
+
+        @functools.wraps(method)
+        def getter_method(self):
+            if method.__name__ in self._attr_cache:
+                return self._attr_cache[method.__name__]
+
+            value = method(self, *(getattr(self, name) for name in arg_names))
+            self._attr_cache[method.__name__] = value
 
             return value
 
-        return getattr(instance, f'_{key}')
+        return getter_method
 
-    @staticmethod
-    def get(key, instance):
-        return getattr(instance, f'_{key}')
+    @classmethod
+    def getter(cls, method):
+        caller_stack = inspect.stack()[1]
+        module_name = inspect.getmodule(caller_stack.frame).__name__
+        cls._marked_getters[f'{module_name}.{caller_stack.function}'].append(method)
+        return method
+
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        self.reset(key)
+
+    def __delattr__(self, key):
+        if key not in self._attr_tree:
+            super().__delattr__(key)
+        elif key in self._attr_cache:
+            del self._attr_cache[key]
+
+    def reset(self, key):
+        if key in self._attr_targets:
+            for target_key in self._attr_targets[key] & set(self._attr_cache):
+                del self._attr_cache[target_key]
 
 
 class WrappedDataFrame(Repr):
