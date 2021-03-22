@@ -25,17 +25,17 @@ class Image(stock.Repr, metaclass=abc.ABCMeta):
     def __getitem__(self, x):
         """Get image value at `x`"""
 
-    @property
-    def real(self):
-        return pandas.Series(numpy.real(self.i.to_numpy()), index=self.i.index)
+    @stock.Attr.getter
+    def real(self, i):
+        return pandas.Series(numpy.real(i.to_numpy()), index=i.index)
 
-    @property
-    def imag(self):
-        return pandas.Series(numpy.imag(self.i.to_numpy()), index=self.i.index)
+    @stock.Attr.getter
+    def imag(self, i):
+        return pandas.Series(numpy.imag(i.to_numpy()), index=i.index)
 
-    @property
-    def density(self):
-        return self.i.abs()**2
+    @stock.Attr.getter
+    def density(self, i):
+        return i.abs()**2
 
 
 class RImage(Image):
@@ -48,9 +48,10 @@ class CImage(Image):
         return self.i.loc[(z.real, z.imag)]
 
 
-@stock.FrozenLazyAttrs(('space', 'curves', 'image_type'), ('image', 'norm'))
-class Vector(stock.Repr, stock.Eq, algebra.Vector):
+@stock.FrozenAttrs('space', 'image_type')
+class Vector(stock.Repr, stock.Attr, stock.Eq, algebra.Vector):
     def __init__(self, space, *curves):
+        super().__init__()
         self.space, self.curves = space, curves
         self.image_type = CImage if isinstance(self.space.bases, spaces.C1Field) else RImage
 
@@ -60,10 +61,12 @@ class Vector(stock.Repr, stock.Eq, algebra.Vector):
     def __str__(self):
         return ' + '.join(list(map(str, self.curves)))
 
-    def _make_image(self):
-        return self.image_type(series=sum(map(self.get_image_series, self.curves)))
+    @stock.Attr.getter
+    def image(self, curves):
+        return self.image_type(series=sum(map(self.get_image_series, curves)))
 
-    def _make_norm(self):
+    @stock.Attr.getter
+    def norm(self, image):
         return numpy.sqrt(self@self)
 
     def get_image_series(self, curve):

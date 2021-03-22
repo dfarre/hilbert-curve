@@ -18,7 +18,7 @@ class InvalidParameters(Exception):
 
 # Abstract base curves #########################################################
 
-@stock.FrozenLazyAttrs(('parameters', 'pole'))
+@stock.FrozenAttrs('parameters', 'pole')
 class Curve(stock.Repr, stock.Hashable, algebra.Scale,
             metaclass=abc.ABCMeta):
     min_dof = None
@@ -94,7 +94,7 @@ class BasisCurve(Curve):
 
 # Piecewise curves #############################################################
 
-@stock.FrozenLazyAttrs(('jumps_at', 'piece_count', 'curves'))
+@stock.FrozenAttrs('jumps_at', 'piece_count', 'curves')
 class PiecewiseCurve(Curve):
     def __init__(self, jumps_at, curves):
         super().__init__(pole=0)
@@ -209,7 +209,7 @@ class InverseXPolynomial(LinearCurve):
                                     for n, param in enumerate(reversed(params))]))
 
 
-@stock.FrozenLazyAttrs(('image',))
+@stock.FrozenAttrs('image')
 class ImageCurve(Curve):
     """General, non-analytical definition for vectors"""
 

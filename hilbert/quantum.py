@@ -9,8 +9,7 @@ from hilbert import spaces
 from hilbert import stock
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('amplitudes', 'brakets', 'consistent'))
-class HistorySet(stock.RealIndexMixin, stock.IndexXYFrame):
+class HistorySet(stock.Attr, stock.RealIndexMixin, stock.IndexXYFrame):
     def __init__(self, data_frame, system, description='History {label}'):
         super().__init__(data_frame)
         self.system = system
@@ -39,41 +38,44 @@ class HistorySet(stock.RealIndexMixin, stock.IndexXYFrame):
         axes.set_title(self.description.format(label='({0} ± {1})'.format(*self.mean_std)))
         axes.grid()
 
-    @property
-    def mean_std(self):
-        p = self.distribution
+    @stock.Attr.getter
+    def mean_std(self, distribution):
+        p = distribution
         mean = round(p@p.index, EQ_ROUND_TO)
 
         return mean, round(numpy.sqrt(p@(p.index - mean)**2), EQ_ROUND_TO)
 
-    @property
-    def distribution(self):
-        return (self.amplitudes.abs()**2)/self.weight
+    @stock.Attr.getter
+    def distribution(self, amplitudes, weight):
+        return (amplitudes.abs()**2)/weight
 
-    @property
-    def weight(self):
-        return (self.amplitudes.abs()**2).sum()
+    @stock.Attr.getter
+    def weight(self, amplitudes):
+        return (amplitudes.abs()**2).sum()
 
-    def _make_consistent(self):
-        return not (self.brakets.to_numpy().real - numpy.diag(self.amplitudes.abs()**2)
+    @stock.Attr.getter
+    def consistent(self, brakets, amplitudes):
+        return not (brakets.to_numpy().real - numpy.diag(amplitudes.abs()**2)
                     ).round(EQ_ROUND_TO).any()
 
-    def _make_brakets(self):
+    @stock.Attr.getter
+    def brakets(self, amplitudes):
         tf = self.o.index[-1]
         return pandas.DataFrame({b: pandas.Series([
-            self.amplitudes[a].conjugate()*self.amplitudes[b]*(self[tf, a]@self[tf, b])
+            amplitudes[a].conjugate()*amplitudes[b]*(self[tf, a]@self[tf, b])
             for a in self.o.columns], index=self.o.columns) for b in self.o.columns})
 
-    def _make_amplitudes(self):
-        return pandas.Series([numpy.product([self.o[k].iat[i]@(
-            self.system(self.o.index[i], self.o.index[i-1])@(self.o[k].iat[i-1]))
-            for i in range(1, len(self.o.index))]) for k in self.o.columns
-        ], index=self.o.columns)
+    @stock.Attr.getter
+    def amplitudes(self, o):
+        return pandas.Series([numpy.product([o[k].iat[i]@(
+            self.system(o.index[i], o.index[i-1])@(o[k].iat[i-1]))
+            for i in range(1, len(o.index))]) for k in o.columns
+        ], index=o.columns)
 
 
-@stock.FrozenLazyAttrs(('space',))
-class System(metaclass=abc.ABCMeta):
+class System(stock.Attr, metaclass=abc.ABCMeta):
     def __init__(self, space):
+        super().__init__(space)
         self.space = space
 
     @abc.abstractmethod
@@ -100,7 +102,6 @@ class System(metaclass=abc.ABCMeta):
         return (vector@(operator@vector))/(vector@vector)
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('hamiltonian',))
 class HamiltonianSystem(System):
     def __call__(self, ti, tf):
         return self.space.unitary_op(-self.hamiltonian*(tf - ti), validate=False)
@@ -111,11 +112,11 @@ class R1System(System):
         super().__init__(spaces.R1Field.range(
             spaces.LebesgueCurveSpace, lbound, rbound, dimension))
 
-    @property
+    @stock.Attr.getter
     def position_op(self):
         return self.space.operator(numpy.diag(self.space.bases.domain()))
 
-    @property
+    @stock.Attr.getter
     def momentum_op(self):
         Pp = self.space.operator(numpy.diag(self.space.fourier_labels))
         F = self.space.fourier_op
@@ -123,12 +124,12 @@ class R1System(System):
         return F@Pp@F.dagger()
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('hop_op',))
 class ToyTrain(R1System):
     def __call__(self, tf, ti):
         return self.space.operator(
             numpy.linalg.matrix_power(self.hop_op.o.to_numpy(), tf - ti))
 
+    @stock.Attr.getter
     def _make_hop_op(self):
         cols = list(self.space.Id.o)
         return self.space.operator(self.space.Id.o[cols[1:]+cols[0:1]].to_numpy())
@@ -162,7 +163,8 @@ class ToyTrain(R1System):
 
 
 class QuasiFreeParticleR1(R1System, HamiltonianSystem):
-    def _make_hamiltonian(self):
+    @stock.Attr.getter
+    def hamiltonian(self):
         Hp = self.space.operator(numpy.diag(self.space.fourier_labels**2))
         F = self.space.fourier_op
 

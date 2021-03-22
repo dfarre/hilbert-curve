@@ -20,9 +20,9 @@ class InvalidVectorMade(Exception):
     """Raised for wrong vector input"""
 
 
-@stock.FrozenLazyAttrs(('bases',))
-class Space(stock.Repr, metaclass=abc.ABCMeta):
+class Space(stock.Repr, stock.Attr, metaclass=abc.ABCMeta):
     def __init__(self, bases, validate_basis=False):
+        super().__init__()
         self.operator_type, self.image_type = (
             (operators.COperator, vectors.CImage) if isinstance(bases, C1Field) else
             (operators.ROperator, vectors.RImage) if isinstance(bases, R1Field) else
@@ -36,11 +36,11 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
     def __str__(self):
         return repr(self.bases)
 
-    @property
-    def Id(self):
+    @stock.Attr.getter
+    def Id(self, bases):
         return self.operator_type(pandas.DataFrame(
-            numpy.identity(self.bases.dimension),
-            columns=self.bases.o.index, index=self.bases.o.index), self)
+            numpy.identity(bases.dimension),
+            columns=bases.o.index, index=bases.o.index), self)
 
     def __call__(self, *args, validate=True, **kwargs):
         vector = self.make_vector(*args, **kwargs)
@@ -148,17 +148,17 @@ class Space(stock.Repr, metaclass=abc.ABCMeta):
 
         return self.operator(linalg.expm(1j*H.o.to_numpy()))
 
-    @property
-    def fourier_op(self):
-        if not (self.operator_type == operators.ROperator and self.bases.dimension % 2 == 0):
+    @stock.Attr.getter
+    def fourier_op(self, bases):
+        if not (self.operator_type == operators.ROperator and bases.dimension % 2 == 0):
             raise NotImplementedError('Fourier basis is defined over ℝ with even dimension')
 
         return self.op_from_callable(self.fourier_basis_coords, axis=1)
 
-    @property
-    def fourier_labels(self):
-        return pandas.Series(self.fourier_label(self.bases.domain()),
-                             index=self.bases.o.index, name='p')
+    @stock.Attr.getter
+    def fourier_labels(self, bases):
+        return pandas.Series(self.fourier_label(bases.domain()),
+                             index=bases.o.index, name='p')
 
     def fourier_label(self, x):
         return 2*numpy.pi*(
@@ -280,12 +280,12 @@ class LebesgueCurveSpace(Space):
             self.bases.setat(new_x, 'fourier', vector/numpy.sqrt(2*copies + 1))
 
 
-class Field(stock.IndexXFrame, metaclass=abc.ABCMeta):
+class Field(stock.Attr, stock.IndexXFrame, metaclass=abc.ABCMeta):
     dtype = None
 
-    @property
-    def dimension(self):
-        return len(self.o.index)
+    @stock.Attr.getter
+    def dimension(self, o):
+        return len(o.index)
 
     @abc.abstractproperty
     def measure(self):
@@ -336,8 +336,8 @@ class R1Field(stock.RealIndexMixin, Field):
     dtype = numpy.float64
 
     def __init__(self, cell, *args, **kwargs):
-        self.cell = cell
         super().__init__(pandas.DataFrame(*args, **kwargs))
+        self.cell = cell
 
     def __str__(self):
         return (f'ℝ-segment | cell {round(self.cell, 9)} with bounds {self.bounds}'

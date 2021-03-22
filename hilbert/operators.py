@@ -11,7 +11,7 @@ from hilbert.curves import lib
 from hilbert.curves import vectors
 
 
-@stock.FrozenLazyAttrs(('space', 'o'))
+@stock.FrozenAttrs('space', 'o')
 class Operator(stock.Eq, stock.IndexXYFrame):
     def __init__(self, data_frame, space):
         super().__init__(data_frame)

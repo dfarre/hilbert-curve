@@ -46,9 +46,9 @@ class ImmutableReset(Exception):
     """Raised on reset try of immutable attributes"""
 
 
-class FrozenLazyAttrs:
-    def __init__(self, frozen_keys=(), lazy_keys=()):
-        self.frozen_keys, self.lazy_keys = frozen_keys, lazy_keys
+class FrozenAttrs:
+    def __init__(self, *frozen_keys):
+        self.frozen_keys = frozen_keys
 
     def __call__(self, cls):
         self.init_keys(cls)
@@ -58,14 +58,10 @@ class FrozenLazyAttrs:
             setattr(cls, key, property(
                 functools.partial(self.get, key), functools.partial(self.set, key)))
 
-        for key in self.lazy_keys:
-            setattr(cls, key, property(
-                functools.partial(self.setget, key), functools.partial(self.set, key)))
-
         return cls
 
     def init_keys(self, obj):
-        self_frozen = dict.fromkeys(self.frozen_keys + self.lazy_keys, False)
+        self_frozen = dict.fromkeys(self.frozen_keys, False)
         obj._frozen = {**getattr(obj, '_frozen', {}), **self_frozen}
 
     def decorate_init(self, function):
@@ -85,17 +81,6 @@ class FrozenLazyAttrs:
         instance._frozen[key] = True
 
     @staticmethod
-    def setget(key, instance):
-        if instance._frozen[key] is False:
-            value = getattr(instance, f'_make_{key}')()
-            setattr(instance, f'_{key}', value)
-            instance._frozen[key] = True
-
-            return value
-
-        return getattr(instance, f'_{key}')
-
-    @staticmethod
     def get(key, instance):
         return getattr(instance, f'_{key}')
 
@@ -103,7 +88,8 @@ class FrozenLazyAttrs:
 class Attr:
     _marked_getters = collections.defaultdict(list)
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._attr_cache = {}
 
     @classmethod
@@ -119,14 +105,16 @@ class Attr:
 
     @classmethod
     def _make_getter(cls, method):
-        arg_names = inspect.getargspec(method)[0][1:]
-        cls._attr_tree[method.__name__].update(set(arg_names) - set(cls._attr_tree))
+        _, *arg_names = inspect.getargspec(method)[0]
 
-        for key in set(arg_names) & set(cls._attr_tree):
-            cls._attr_tree[method.__name__].update(cls._attr_tree[key])
+        if arg_names:
+            cls._attr_tree[method.__name__].update(set(arg_names) - set(cls._attr_tree))
 
-        for key in cls._attr_tree[method.__name__]:
-            cls._attr_targets[key].add(method.__name__)
+            for key in set(arg_names) & set(cls._attr_tree):
+                cls._attr_tree[method.__name__].update(cls._attr_tree[key])
+
+            for key in cls._attr_tree[method.__name__]:
+                cls._attr_targets[key].add(method.__name__)
 
         @functools.wraps(method)
         def getter_method(self):
@@ -149,7 +137,15 @@ class Attr:
 
     def __setattr__(self, key, value):
         super().__setattr__(key, value)
+        self.reset(key)
 
+    def __delattr__(self, key):
+        if key not in self._attr_tree:
+            super().__delattr__(key)
+        elif key in self._attr_cache:
+            del self._attr_cache[key]
+
+    def reset(self, key):
         if key in self._attr_targets:
             for target_key in self._attr_targets[key] & set(self._attr_cache):
                 del self._attr_cache[target_key]
