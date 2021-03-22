@@ -36,6 +36,7 @@ class Klass(stock.Attr):
             setattr(self, key, value)
 
         self.sleep_time = sleep_time
+        self.lst = []
 
     @stock.Attr.getter
     def ab(self, a, b):
@@ -47,12 +48,21 @@ class Klass(stock.Attr):
         time.sleep(self.sleep_time)
         return ab * c
 
+    @stock.Attr.getter
+    def length(self, lst):
+        time.sleep(self.sleep_time)
+        return len(lst)
+
+    @stock.Attr.mutates('lst')
+    def append(self, x):
+        self.lst.append(x)
+
 
 class AttrTests(unittest.TestCase):
     def setUp(self):
         self.obj = Klass(0.00001, a=2, b=-5, c=3)
 
-    def test(self):
+    def test_set_and_del(self):
         self.assert_time_property('ab', -3, slow=True)
         self.assert_time_property('ab', -3, slow=False)
         self.assert_time_property('abc', -9, slow=True)
@@ -62,6 +72,13 @@ class AttrTests(unittest.TestCase):
         del self.obj.abc
         del self.obj.abc
         self.assert_time_property('abc', 6, slow=True)
+
+    def test_mutation_method(self):
+        self.assert_time_property('length', 0, slow=True)
+        self.assert_time_property('length', 0, slow=False)
+        self.obj.append(22)
+        self.assert_time_property('length', 1, slow=True)
+        self.assert_time_property('length', 1, slow=False)
 
     def assert_time_property(self, name, expected_value, slow=False):
         t0 = time.time()
