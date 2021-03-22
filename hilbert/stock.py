@@ -140,6 +140,17 @@ class Attr:
         cls._marked_getters[f'{module_name}.{caller_stack.function}'].append(method)
         return method
 
+    @classmethod
+    def mutates(cls, *modified_attrs):
+        def mark(method):
+            @functools.wraps(method)
+            def mutator_method(self, *args, **kwargs):
+                ret = method(self, *args, **kwargs)
+                self.reset(*modified_attrs)
+                return ret
+            return mutator_method
+        return mark
+
     def __setattr__(self, key, value):
         super().__setattr__(key, value)
         self.reset(key)
@@ -150,8 +161,8 @@ class Attr:
         elif key in self._attr_cache:
             del self._attr_cache[key]
 
-    def reset(self, key):
-        if key in self._attr_targets:
+    def reset(self, *keys):
+        for key in set(keys) & set(self._attr_targets):
             for target_key in self._attr_targets[key] & set(self._attr_cache):
                 del self._attr_cache[target_key]
 
