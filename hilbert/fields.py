@@ -153,13 +153,12 @@ class R2Field(FlatIndexField):
     dtype = numpy.complex128
 
     def __init__(self, sw, ne, re_cells, im_cells=None, **kwargs):
+        super().__init__(index=self.index, **kwargs)
         im_cells = im_cells or re_cells
         x_array, self.x_cell = numpy.linspace(sw.real, ne.real, re_cells, retstep=True)
         y_array, self.y_cell = numpy.linspace(sw.imag, ne.imag, im_cells, retstep=True)
         self.x_array = numpy.around(x_array, INDEX_ROUND_TO)
         self.y_array = numpy.around(y_array, INDEX_ROUND_TO)
-
-        super().__init__(index=self.index, **kwargs)
 
     def __str__(self):
         return (f'ℝ²-rectangle | cell {self.x_cell}x{self.y_cell} with '

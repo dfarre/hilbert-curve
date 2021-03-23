@@ -2,11 +2,8 @@ import abc
 import collections
 import functools
 import inspect
-<<<<<<< HEAD
 
 import pandas
-=======
->>>>>>> master
 
 from matplotlib import pyplot
 
@@ -93,10 +90,6 @@ class FrozenAttrs:
 class Attr:
     _marked_getters = collections.defaultdict(list)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._attr_cache = {}
-
     @classmethod
     def __init_subclass__(cls):
         cls._attr_tree = collections.defaultdict(set)
@@ -107,6 +100,10 @@ class Attr:
             setattr(cls, method.__name__, property(cls._make_getter(method)))
 
         del Attr._marked_getters[cls_path]
+
+    @classmethod
+    def _get_defining_attrs(cls):
+        return set.union(*cls._attr_tree.values())
 
     @classmethod
     def _make_getter(cls, method):
@@ -141,19 +138,37 @@ class Attr:
         return method
 
     @classmethod
-    def mutates(cls, *modified_attrs):
+    def mutates(cls, *modified_attrs, **not_when):
         def mark(method):
             @functools.wraps(method)
             def mutator_method(self, *args, **kwargs):
-                ret = method(self, *args, **kwargs)
-                self.reset(*modified_attrs)
-                return ret
+                try:
+                    ret = method(self, *args, **kwargs)
+                except Exception as exc:
+                    self._clear_targets_cache(*(
+                        key for key, exc_types in not_when.items()
+                        if not any([issubclass(exc.__class__, e) for e in exc_types])))
+                    raise exc
+                else:
+                    self._clear_targets_cache(*modified_attrs)
+                    return ret
             return mutator_method
         return mark
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._attr_cache = {}
+
     def __setattr__(self, key, value):
-        super().__setattr__(key, value)
-        self.reset(key)
+        if key in self._attr_tree:
+            self._clear_targets_cache(key)
+            self._attr_cache[key] = value
+
+            for k in self._attr_tree[key]:
+                super().__delattr__(k)
+        else:
+            super().__setattr__(key, value)
+            self._clear_targets_cache(key)
 
     def __delattr__(self, key):
         if key not in self._attr_tree:
@@ -161,13 +176,16 @@ class Attr:
         elif key in self._attr_cache:
             del self._attr_cache[key]
 
-    def reset(self, *keys):
-        for key in set(keys) & set(self._attr_targets):
-            for target_key in self._attr_targets[key] & set(self._attr_cache):
-                del self._attr_cache[target_key]
+    def _clear_targets_cache(self, *keys):
+        for key in keys:
+            if key in self._attr_targets:
+                for target_key in self._attr_targets[key] & set(self._attr_cache):
+                    del self._attr_cache[target_key]
+            elif key in self._attr_tree:
+                self._clear_targets_cache(*self._attr_tree[key])
 
 
-class WrappedDataFrame(Repr):
+class WrappedDataFrame(Repr, Attr):
     """Pandas data frame wrapper - an alternative to subclassing"""
     dtype = None
 
@@ -180,12 +198,14 @@ class WrappedDataFrame(Repr):
     def __getitem__(self, location):
         return self.o.loc[location]
 
+    @Attr.mutates('o')
     def __setitem__(self, location, value):
         self.o.loc[location] = value
 
     def at(self, x, column):
         return self.o.at[x, column]
 
+    @Attr.mutates('o', o=(KeyError,))
     def put(self, x, column, value):
         if x not in self.o.index:
             raise KeyError(f'{x} not in index')

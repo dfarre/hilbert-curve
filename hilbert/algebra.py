@@ -191,8 +191,8 @@ class ScalableAbelianSum(Scalable, metaclass=abc.ABCMeta):
         return -self.__sub__(other)
 
 
-@stock.FrozenLazyAttrs(lazy_keys=('image',))
-class Vector(ScalableAbelianSum, stock.Repr, stock.Hashable, metaclass=abc.ABCMeta):
+class Vector(ScalableAbelianSum, stock.Repr, stock.Attr, stock.Hashable,
+             metaclass=abc.ABCMeta):
     def __call__(self, ix):
         return self.image[ix]
 
@@ -216,7 +216,7 @@ class Vector(ScalableAbelianSum, stock.Repr, stock.Hashable, metaclass=abc.ABCMe
     def measure(self):
         return 1
 
-    @property
+    @stock.Attr.getter
     def norm(self):
         return numpy.sqrt(self@self)
 
@@ -343,7 +343,8 @@ class Image(Vector):
         self.i = pandas.Series(*args, **kwargs) if series is None else series
         super().__init__()
 
-    def _make_image(self):
+    @property
+    def image(self):
         return self
 
     def braket(self, other):

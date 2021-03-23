@@ -54,6 +54,7 @@ class Klass(stock.Attr):
     @stock.Attr.mutates('lst')
     def append(self, x):
         self.lst.append(x)
+        return self.lst
 
 
 class AttrTests(unittest.TestCase):
@@ -71,10 +72,26 @@ class AttrTests(unittest.TestCase):
         del self.obj.abc
         self.assert_time_property('abc', 6, slow=True)
 
+    def test_set_defined_attr(self):
+        self.assert_time_property('abc', -9, slow=True)
+        self.obj.ab = 11
+        assert not hasattr(self.obj, 'a')
+        assert not hasattr(self.obj, 'b')
+        self.assert_time_property('abc', 33, slow=True)
+        self.assert_time_property('ab', 11, slow=False)
+        self.obj.a = 7
+
+        with self.assertRaises(AttributeError):
+            self.obj.ab
+
+        self.obj.b = 0
+        self.assert_time_property('ab', 7, slow=True)
+        self.assert_time_property('abc', 21, slow=True)
+
     def test_mutation_method(self):
         self.assert_time_property('length', 0, slow=True)
         self.assert_time_property('length', 0, slow=False)
-        self.obj.append(22)
+        assert self.obj.append(22) == [22]
         self.assert_time_property('length', 1, slow=True)
         self.assert_time_property('length', 1, slow=False)
 
